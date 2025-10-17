@@ -152,7 +152,7 @@ window.addEventListener("DOMContentLoaded",()=>{
     Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
   </div>
   <div class="button-group">
-    <button class="btn-export" id="exportDatabase">📦 Esporta Database (.json)</button>
+    <button class="btn-export" id="exportDatabase">📦 Esporta Database (.txt)</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
@@ -351,7 +351,7 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// 🆕 ESPORTA DATABASE
+// 🟢 MODIFICA: ESPORTA COME .TXT PER SAFARI/IOS 
 document.getElementById('exportDatabase').onclick=()=>{
   const database = {
     version: '1.0',
@@ -362,10 +362,11 @@ document.getElementById('exportDatabase').onclick=()=>{
   };
   
   const dataStr = JSON.stringify(database, null, 2);
-  const filename = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+  // Usa estensione .txt
+  const filename = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.txt`;
   
-  // 🟢 STRATEGIA PIÙ ROBUSTA PER GRANDI FILE (Blob/Object URL)
-  const blob = new Blob([dataStr], {type: 'application/json'});
+  // Usa MIME type text/plain
+  const blob = new Blob([dataStr], {type: 'text/plain'});
   const url = URL.createObjectURL(blob);
   
   const a = document.createElement('a');
@@ -378,7 +379,7 @@ document.getElementById('exportDatabase').onclick=()=>{
   document.body.removeChild(a);
   
   // Istruzioni chiare per l'utente, specialmente su Safari/iOS
-  alert('✅ Database esportato con successo!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. Dovrebbe apparire una freccia blu in alto a destra (accanto alla barra degli indirizzi).\n2. Clicca sulla freccia per vedere il download e assicurati che il file sia stato salvato nella cartella "Download" di iCloud o sul tuo iPhone.');
+  alert('✅ Database esportato come ' + filename + '!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. Dovrebbe apparire una freccia blu in alto a destra (accanto alla barra degli indirizzi).\n2. Clicca sulla freccia per vedere il download e assicurati che il file sia stato salvato nella cartella "Download" di iCloud o sul tuo iPhone.\n\n***IMPORTANTE per il ripristino***\nPrima di importare il file, devi rinominarlo da **.txt** a **.json** utilizzando l\'app "File" di Apple.');
 };
 
 // 🆕 IMPORTA DATABASE
@@ -437,6 +438,7 @@ document.getElementById('importDatabase').onchange=e=>{
     e.target.value = '';
   };
   
+  // L'importazione funziona sia con .txt che con .json
   reader.readAsText(file);
 };
 
