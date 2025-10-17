@@ -127,28 +127,6 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   flex-wrap:wrap;
   margin-top:8px;
 }
-.loading{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,0.7);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  z-index:10000;
-  color:#fff;
-  font-size:18px;
-  flex-direction:column;
-  gap:10px;
-}
-.loading-spinner{
-  width:50px;
-  height:50px;
-  border:5px solid rgba(255,255,255,0.3);
-  border-top:5px solid #fff;
-  border-radius:50%;
-  animation:spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -161,29 +139,22 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   </div>
 </header>
 
-<script>
-window.addEventListener("DOMContentLoaded",()=>{
-  const logoBox=document.getElementById("logoBox");
-  requestAnimationFrame(()=>logoBox.classList.add("show"));
-});
-</script>
-
-<!-- 🆕 SEZIONE IMPORT/EXPORT DATABASE -->
+<!-- SEZIONE IMPORT/EXPORT -->
 <div class="import-export-section">
-  <h4>💾 Import/Export Database (IndexedDB - Illimitato)</h4>
+  <h4>💾 Import/Export Database via Telegram</h4>
   <div style="font-size:13px;color:#856404;margin-bottom:10px;">
-    Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
+    Usa Telegram per trasferire il database tra telefono e PC (nessun limite di dimensione!)
   </div>
   <div class="button-group">
-    <button class="btn-export" id="exportDatabase">📦 Download Database</button>
-    <button class="btn-export" id="sendTelegram">📱 Invia su Telegram</button>
+    <button class="btn-export" id="exportDatabase">📦 Scarica Database</button>
+    <button class="btn-export" id="sendTelegram">📱 Apri Telegram</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
     </label>
   </div>
   <div style="font-size:12px;color:#856404;margin-top:8px;">
-    💡 <strong>Consiglio:</strong> Usa Telegram per trasferire il database tra telefono e PC. Invialo a "Messaggi Salvati"!
+    💡 <strong>Come funziona:</strong> Scarica → Apri Telegram → Invia a "Messaggi Salvati" → Sul PC scaricalo e importa
   </div>
 </div>
 
@@ -204,106 +175,12 @@ window.addEventListener("DOMContentLoaded",()=>{
 </div>
 
 <script>
-let sections=[],logoData=null;
-const main=document.getElementById('mainContent');
+// VARIABILI GLOBALI
+let sections = [];
+let logoData = null;
+const main = document.getElementById('mainContent');
 
-// 🆕 INDEXEDDB MANAGER
-const DB_NAME = 'EleonoraCatalogo';
-const DB_VERSION = 1;
-let db = null;
-
-function initDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      db = request.result;
-      resolve(db);
-    };
-    
-    request.onupgradeneeded = (e) => {
-      const database = e.target.result;
-      
-      // Store per le sezioni
-      if (!database.objectStoreNames.contains('sections')) {
-        database.createObjectStore('sections', { keyPath: 'id' });
-      }
-      
-      // Store per i metadati (logo, email, etc)
-      if (!database.objectStoreNames.contains('metadata')) {
-        database.createObjectStore('metadata', { keyPath: 'key' });
-      }
-    };
-  });
-}
-
-async function saveDB() {
-  if (!db) await initDB();
-  
-  const tx = db.transaction(['sections', 'metadata'], 'readwrite');
-  const sectionsStore = tx.objectStore('sections');
-  const metaStore = tx.objectStore('metadata');
-  
-  // Cancella tutto prima
-  await sectionsStore.clear();
-  
-  // Salva sezioni
-  for (const sec of sections) {
-    await sectionsStore.put(sec);
-  }
-  
-  // Salva metadata
-  await metaStore.put({ key: 'logo', value: logoData });
-  await metaStore.put({ key: 'email', value: document.getElementById('emailDest').value });
-  
-  return tx.complete;
-}
-
-async function loadDB() {
-  if (!db) await initDB();
-  
-  const tx = db.transaction(['sections', 'metadata'], 'readonly');
-  const sectionsStore = tx.objectStore('sections');
-  const metaStore = tx.objectStore('metadata');
-  
-  // Carica sezioni
-  const allSections = await sectionsStore.getAll();
-  if (allSections.length > 0) {
-    sections = allSections;
-  } else {
-    sections = [{id: uid('sec'), name: 'Natale', items: []}];
-  }
-  
-  // Carica logo
-  const logoMeta = await metaStore.get('logo');
-  if (logoMeta && logoMeta.value) {
-    logoData = logoMeta.value;
-    document.getElementById('logoImg').src = logoData;
-    document.getElementById('logoImg').style.display = 'block';
-    document.querySelector('#logoBox span').style.display = 'none';
-  }
-  
-  // Carica email
-  const emailMeta = await metaStore.get('email');
-  if (emailMeta && emailMeta.value) {
-    document.getElementById('emailDest').value = emailMeta.value;
-  }
-}
-
-function showLoading(text = 'Caricamento...') {
-  const loading = document.createElement('div');
-  loading.className = 'loading';
-  loading.id = 'loadingOverlay';
-  loading.innerHTML = `<div class="loading-spinner"></div><div>${text}</div>`;
-  document.body.appendChild(loading);
-}
-
-function hideLoading() {
-  const loading = document.getElementById('loadingOverlay');
-  if (loading) loading.remove();
-}
-
+// UTILITY
 function uid(p='id'){return p+'_'+Math.floor(Math.random()*1e9).toString(36);}
 
 function updateTotal(){
@@ -324,19 +201,47 @@ function nextCode(){
   return max+1;
 }
 
+// SALVATAGGIO/CARICAMENTO (usa variabili in memoria)
+const data = {
+  sections: [],
+  logo: null,
+  email: ''
+};
+
+function save(){
+  data.sections = sections;
+  data.logo = logoData;
+  data.email = document.getElementById('emailDest').value;
+}
+
+function load(){
+  if(data.sections.length > 0){
+    sections = data.sections;
+    logoData = data.logo;
+    if(logoData){
+      document.getElementById('logoImg').src = logoData;
+      document.getElementById('logoImg').style.display = 'block';
+      document.querySelector('#logoBox span').style.display = 'none';
+    }
+    if(data.email){
+      document.getElementById('emailDest').value = data.email;
+    }
+  } else {
+    sections = [{id:uid('sec'),name:'Natale',items:[]}];
+  }
+}
+
+// AGGIUNGI FOTO
 function addPhoto(sec){
   const inp=document.createElement('input');
   inp.type='file';inp.multiple=true;inp.accept='image/*';
   inp.onchange=e=>{
     const files=Array.from(e.target.files);
-    showLoading(`Caricamento ${files.length} foto...`);
-    
-    let processed = 0;
     files.forEach(file=>{
       const r=new FileReader();
       r.onload=ev=>{
         const img=new Image();
-        img.onload=async ()=>{
+        img.onload=()=>{
           const max=800;let w=img.width,h=img.height;
           if(w>h&&w>max){h=h*max/w;w=max;}
           else if(h>max){w=w*max/h;h=max;}
@@ -353,13 +258,7 @@ function addPhoto(sec){
             qty:0,
             fav:false
           });
-          
-          processed++;
-          if (processed === files.length) {
-            await saveDB();
-            render();
-            hideLoading();
-          }
+          save();render();
         };
         img.src=ev.target.result;
       };
@@ -369,10 +268,13 @@ function addPhoto(sec){
   inp.click();
 }
 
+// RENDER
 function render(){
   main.innerHTML='';
   sections.forEach(sec=>{
-    const s=document.createElement('div');s.className='section';s.draggable=true;
+    const s=document.createElement('div');
+    s.className='section';
+    s.draggable=true;
     s.innerHTML=`
       <div class="head">
         <h3>${sec.name} <button class="del" title="Elimina sezione">🗑️</button></h3>
@@ -397,15 +299,14 @@ function render(){
       `;
       grid.appendChild(c);
 
-      c.querySelector('.note').oninput=async e=>{it.note=e.target.textContent;await saveDB();};
-      c.querySelector('input[type=checkbox]').onchange=async e=>{it.fav=e.target.checked;await saveDB();};
-      c.querySelector('.qty').onchange=async e=>{it.qty=parseInt(e.target.value)||0;await saveDB();};
+      c.querySelector('.note').oninput=e=>{it.note=e.target.textContent;save();};
+      c.querySelector('input[type=checkbox]').onchange=e=>{it.fav=e.target.checked;save();};
+      c.querySelector('.qty').onchange=e=>{it.qty=parseInt(e.target.value)||0;save();};
 
-      c.querySelector('.del-photo').onclick=async ()=>{
+      c.querySelector('.del-photo').onclick=()=>{
         if(confirm('Vuoi eliminare questa foto?')){
           sec.items = sec.items.filter(x=>x.id!==it.id);
-          await saveDB();
-          render();
+          save();render();
         }
       };
     });
@@ -417,20 +318,20 @@ function render(){
 
     s.querySelector('.btn-ghost').onclick=()=>addPhoto(sec);
 
-    s.querySelector('.del').onclick=async ()=>{
+    s.querySelector('.del').onclick=()=>{
       if(confirm('Vuoi eliminare la sezione "'+sec.name+'"?')){
         sections=sections.filter(x=>x.id!==sec.id);
-        await saveDB();
-        render();
+        save();render();
       }
     };
 
     s.addEventListener('dragstart',()=>s.classList.add('dragging'));
-    s.addEventListener('dragend',async ()=>{s.classList.remove('dragging');await saveDB();});
+    s.addEventListener('dragend',()=>{s.classList.remove('dragging');save();});
     main.appendChild(s);
   });
 
   updateTotal();
+  save();
   enableDrag();
 }
 
@@ -438,6 +339,7 @@ function enableDrag(){
   main.addEventListener('dragover',e=>{
     e.preventDefault();
     const dragging=document.querySelector('.dragging');
+    if(!dragging) return;
     const after=getDragAfterElement(main,e.clientY);
     if(after==null) main.appendChild(dragging); 
     else main.insertBefore(dragging,after);
@@ -445,6 +347,7 @@ function enableDrag(){
       const id=s.querySelector('.btn-ghost').dataset.id;
       return sections.find(x=>x.id===id);
     });
+    save();
   });
 }
 
@@ -459,11 +362,9 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// 🆕 ESPORTA DATABASE (Download)
-document.getElementById('exportDatabase').onclick=async ()=>{
+// ESPORTA DATABASE
+document.getElementById('exportDatabase').onclick=()=>{
   try {
-    showLoading('Esportazione database...');
-    
     const database = {
       version: '1.0',
       exportDate: new Date().toISOString(),
@@ -483,150 +384,42 @@ document.getElementById('exportDatabase').onclick=async ()=>{
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
     
-    hideLoading();
-    alert('✅ Database esportato! Controlla la cartella Download.');
+    alert('✅ Database scaricato!\n\nOra:\n1️⃣ Apri Telegram\n2️⃣ Vai in "Messaggi Salvati"\n3️⃣ Carica il file dalla cartella Download\n4️⃣ Sul PC scaricalo e importa');
   } catch(err) {
-    hideLoading();
-    alert('❌ Errore durante l\'esportazione:\n' + err.message);
-    console.error(err);
-  }
-};
-
-// 🆕 INVIA SU TELEGRAM
-document.getElementById('sendTelegram').onclick=async ()=>{
-  try {
-    showLoading('Preparazione database per Telegram...');
-    
-    const database = {
-      version: '1.0',
-      exportDate: new Date().toISOString(),
-      logo: logoData,
-      email: document.getElementById('emailDest').value,
-      sections: sections
-    };
-    
-    const dataStr = JSON.stringify(database);
-    const totalPhotos = sections.reduce((tot,s)=>tot+s.items.length,0);
-    
-    hideLoading();
-    
-    // Prova prima con Web Share API (funziona meglio su mobile moderni)
-    if (navigator.share && navigator.canShare) {
-      try {
-        const blob = new Blob([dataStr], {type: 'application/json'});
-        const fileName = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
-        const file = new File([blob], fileName, {type: 'application/json'});
-        
-        if (navigator.canShare({files: [file]})) {
-          await navigator.share({
-            title: 'Database Catalogo Eleonora',
-            text: `📸 Database con ${totalPhotos} foto\n📅 ${new Date().toLocaleDateString('it-IT')}`,
-            files: [file]
-          });
-          
-          alert('✅ Perfetto! Ora:\n\n1️⃣ Seleziona TELEGRAM\n2️⃣ Cerca "Messaggi Salvati"\n3️⃣ Invia il file\n4️⃣ Sul PC apri Telegram e scaricalo');
-          return;
-        }
-      } catch(e) {
-        console.log('Web Share non disponibile, uso metodo alternativo');
-      }
-    }
-    
-    // Metodo alternativo: crea file e apri Telegram Web
-    const blob = new Blob([dataStr], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    // Prepara messaggio per Telegram
-    const message = `📦 Database Catalogo Eleonora
-📸 Foto: ${totalPhotos}
-📅 Data: ${new Date().toLocaleDateString('it-IT')}
-💾 File scaricato! Ora caricalo su Telegram.`;
-    
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      
-      const choice = confirm(
-        '✅ File scaricato!\n\n' +
-        'Vuoi aprire Telegram Web per caricarlo?\n\n' +
-        '• OK = Apri Telegram Web\n' +
-        '• Annulla = Aprilo manualmente dall\'app'
-      );
-      
-      if (choice) {
-        // Apri Telegram Web
-        window.open('https://web.telegram.org', '_blank');
-        
-        setTimeout(() => {
-          alert(
-            '📱 ISTRUZIONI:\n\n' +
-            '1️⃣ Accedi a Telegram Web\n' +
-            '2️⃣ Cerca "Messaggi Salvati" (icona bookmark)\n' +
-            '3️⃣ Clicca sulla graffetta 📎\n' +
-            '4️⃣ Carica il file JSON appena scaricato\n' +
-            '5️⃣ Sul PC apri Telegram e scaricalo\n' +
-            '6️⃣ Importalo nel generatore con "📥 Importa Database"'
-          );
-        }, 2000);
-      } else {
-        alert(
-          '📱 ISTRUZIONI:\n\n' +
-          '1️⃣ Apri Telegram sul telefono\n' +
-          '2️⃣ Vai in "Messaggi Salvati"\n' +
-          '3️⃣ Clicca sulla graffetta 📎\n' +
-          '4️⃣ Seleziona "File"\n' +
-          '5️⃣ Cerca e carica il file JSON dalla cartella Download\n' +
-          '6️⃣ Sul PC apri Telegram e scaricalo\n' +
-          '7️⃣ Importalo nel generatore con "📥 Importa Database"'
-        );
-      }
-    }, 500);
-    
-  } catch(err) {
-    hideLoading();
     alert('❌ Errore: ' + err.message);
     console.error(err);
   }
 };
 
-function showTextArea(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;height:80%;z-index:10000;padding:10px;font-size:12px;';
-  document.body.appendChild(ta);
-  ta.select();
+// APRI TELEGRAM
+document.getElementById('sendTelegram').onclick=()=>{
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;';
-  document.body.appendChild(overlay);
-  
-  alert('📋 Seleziona tutto (tieni premuto → "Seleziona tutto"), poi copia e chiudi.\n\nIncollalo in Note e salvalo come "database.json"');
-  
-  overlay.onclick = () => {
-    document.body.removeChild(ta);
-    document.body.removeChild(overlay);
-  };
-}
+  if(isMobile){
+    // Su mobile prova ad aprire l'app
+    window.location.href = 'tg://resolve?domain=';
+    setTimeout(() => {
+      alert('📱 Telegram aperto!\n\n1️⃣ Vai in "Messaggi Salvati"\n2️⃣ Clicca sulla graffetta 📎\n3️⃣ Seleziona "File"\n4️⃣ Carica il file JSON dalla cartella Download');
+    }, 500);
+  } else {
+    // Su desktop apri Telegram Web
+    window.open('https://web.telegram.org', '_blank');
+    alert('💻 Telegram Web aperto!\n\n1️⃣ Accedi a Telegram\n2️⃣ Cerca "Messaggi Salvati" (icona bookmark)\n3️⃣ Clicca sulla graffetta 📎\n4️⃣ Carica il file JSON');
+  }
+};
 
-// 🆕 IMPORTA DATABASE
-document.getElementById('importDatabase').onchange=async e=>{
+// IMPORTA DATABASE
+document.getElementById('importDatabase').onchange=e=>{
   const file = e.target.files[0];
   if(!file) return;
   
-  if(!confirm('⚠️ ATTENZIONE: L\'importazione sostituirà tutti i dati attuali. Continuare?')) {
+  if(!confirm('⚠️ L\'importazione sostituirà tutti i dati attuali. Continuare?')) {
     e.target.value = '';
     return;
   }
   
-  showLoading('Importazione database...');
-  
   const reader = new FileReader();
-  reader.onload = async ev => {
+  reader.onload = ev => {
     try {
       const database = JSON.parse(ev.target.result);
       
@@ -634,11 +427,9 @@ document.getElementById('importDatabase').onchange=async e=>{
         throw new Error('File non valido');
       }
       
-      // Importa tutto
       sections = database.sections;
       logoData = database.logo || null;
       
-      // Aggiorna logo
       if(logoData) {
         document.getElementById('logoImg').src = logoData;
         document.getElementById('logoImg').style.display = 'block';
@@ -652,20 +443,16 @@ document.getElementById('importDatabase').onchange=async e=>{
         document.getElementById('emailDest').value = database.email;
       }
       
-      // Salva in IndexedDB
-      await saveDB();
+      save();
       render();
-      
-      hideLoading();
       
       alert('✅ Database importato!\n\n' + 
             `📦 Sezioni: ${sections.length}\n` +
-            `📸 Foto totali: ${sections.reduce((tot,s)=>tot+s.items.length,0)}\n` +
-            `📅 Esportato: ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
+            `📸 Foto: ${sections.reduce((tot,s)=>tot+s.items.length,0)}\n` +
+            `📅 ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
       
     } catch(err) {
-      hideLoading();
-      alert('❌ Errore importazione:\n' + err.message);
+      alert('❌ Errore: ' + err.message);
       console.error(err);
     }
     
@@ -675,42 +462,44 @@ document.getElementById('importDatabase').onchange=async e=>{
   reader.readAsText(file);
 };
 
-document.getElementById('addSectionBtn').onclick=async ()=>{
+// ALTRI PULSANTI
+document.getElementById('addSectionBtn').onclick=()=>{
   const n=document.getElementById('newSectionName').value.trim();
   if(!n)return alert('Scrivi un nome sezione!');
   sections.push({id:uid('sec'),name:n,items:[]});
   document.getElementById('newSectionName').value='';
-  await saveDB();
-  render();
+  save();render();
 };
 
-document.getElementById('newSectionName').addEventListener('keypress', async e => {
+document.getElementById('newSectionName').addEventListener('keypress', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
     document.getElementById('addSectionBtn').click();
   }
 });
 
-document.getElementById('logoInput').onchange=async e=>{
+document.getElementById('logoInput').onchange=e=>{
   const f=e.target.files[0];
   if(!f)return;
   const r=new FileReader();
-  r.onload=async a=>{
+  r.onload=a=>{
     logoData=a.target.result;
     const img=document.getElementById('logoImg');
     img.src=logoData;
     img.style.display='block';
     document.querySelector('#logoBox span').style.display='none';
-    await saveDB();
+    save();
   };
   r.readAsDataURL(f);
 };
 
-document.getElementById('resetStorage').onclick=async ()=>{
+document.getElementById('resetStorage').onclick=()=>{
   if(confirm('Eliminare tutto?')){
-    if (db) {
-      indexedDB.deleteDatabase(DB_NAME);
-    }
+    sections = [];
+    logoData = null;
+    data.sections = [];
+    data.logo = null;
+    data.email = '';
     location.reload();
   }
 };
@@ -731,16 +520,70 @@ document.getElementById('exportHtml').onclick=()=>{
     .btn{padding:10px 16px;border-radius:12px;border:0;background:linear-gradient(135deg,#c9b7ff,#f7d1e0);color:#fff;font-weight:600;cursor:pointer;display:block;margin:10px auto;}
     .logoBox{width:120px;height:120px;margin:0 auto 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#f7f3ff;}
     .logoBox img{max-width:100%;max-height:100%;object-fit:contain;}
-    #intro{
-      position:fixed;inset:0;
-      background:linear-gradient(135deg,#fdf5f9,#f3e7ff);
-      display:flex;align-items:center;justify-content:center;
-      flex-direction:column;z-index:9999;
-      animation:fadeOut 1s ease 2.5s forwards;
-    }
-    #intro img{
-      width:280px;
-      height:280px;
-      object-fit:contain;
-      opacity:0;
-      animation:logoIn 1.2s ease forwards;
+    #intro{position:fixed;inset:0;background:linear-gradient(135deg,#fdf5f9,#f3e7ff);display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;animation:fadeOut 1s ease 2.5s forwards;}
+    #intro img{width:280px;height:280px;object-fit:contain;opacity:0;animation:logoIn 1.2s ease forwards;}
+    @keyframes logoIn{0%{opacity:0;transform:scale(0.8);}100%{opacity:1;transform:scale(1);}}
+    @keyframes fadeOut{to{opacity:0;visibility:hidden;}}
+    #content{opacity:0;animation:showContent 1s ease 2.5s forwards;}
+    @keyframes showContent{to{opacity:1;}}
+  </style></head><body>
+  <div id="intro">
+    ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D'Arte Eleonora</div>`}
+  </div>
+  <div id="content">
+  ${logoData?`<div class="logoBox"><img src="${logoData}"></div>`:`<div class="logoBox">Logo</div>`}
+  <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D'Arte Eleonora</h1>
+  <input id="clienteNome" placeholder="Nome cliente" style="width:60%;padding:8px;border:1px solid #ccc;border-radius:8px;display:block;margin:10px auto;text-align:center;font-weight:600;color:#7a3b6f;">
+  ${sections.map(sec=>`<section><div class="head"><h3 style="margin:0;font-family:'Dancing Script',cursive;color:#7a3b6f">${sec.name}</h3><span>▼</span></div><div class="cards">
+  ${sec.items.map(it=>`<div style="background:#fff;padding:6px;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,0.05)">
+  <img src="${it.img}"><div style="font-weight:700;color:#c64d6f">${it.code}</div><div>${it.note||''}</div>
+  <div><label><input type="checkbox"> 💕</label> <input type="number" min="0" value="${it.qty}" style="width:60px"></div></div>`).join('')}
+  </div></section>`).join('')}
+  <button class="btn" id="sendWhats">📩 Invia selezione su WhatsApp</button>
+  <button class="btn" id="sendEmail">📧 Invia via Email</button>
+  </div>
+  <script>
+  document.querySelectorAll('.head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+  function genMsg(){
+    const nome=document.getElementById('clienteNome').value.trim();
+    let msg='Ordine'+(nome?' di '+nome:'')+'%0A%0A';
+    document.querySelectorAll('section').forEach(sec=>{
+      sec.querySelectorAll('.cards > div').forEach(card=>{
+        const chk=card.querySelector('input[type=checkbox]');
+        if(chk.checked){
+          const code=card.querySelector('div:nth-child(2)').innerText;
+          const note=card.querySelector('div:nth-child(3)').innerText;
+          const qty=card.querySelector('input[type=number]').value;
+          msg+=code+' – '+note+' (x'+qty+')%0A';
+        }
+      });
+    });
+    return msg;
+  }
+  document.getElementById('sendWhats').onclick=()=>{
+    const m=genMsg();
+    window.open('https://wa.me/?text='+m,'_blank');
+  };
+  document.getElementById('sendEmail').onclick=()=>{
+    const m=genMsg();
+    window.location.href='mailto:${email}?subject=Ordine Creazioni D\\'Arte Eleonora&body='+m.replace(/%0A/g,'%0D%0A');
+  };
+  <\/script></body></html>`;
+
+  const blob=new Blob([clienteHtml],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='catalogo_cliente.html';
+  a.click();
+};
+
+// INIT
+window.addEventListener("DOMContentLoaded",()=>{
+  const logoBox=document.getElementById("logoBox");
+  requestAnimationFrame(()=>logoBox.classList.add("show"));
+  load();
+  render();
+});
+</script>
+</body>
+</html>
