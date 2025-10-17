@@ -351,7 +351,7 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// 🟢 MODIFICA: ESPORTA COME .TXT PER SAFARI/IOS 
+// 🟢 MODIFICA: ESPORTA COME .TXT CON OTTIMIZZAZIONE ASINCRONA PER SAFARI
 document.getElementById('exportDatabase').onclick=()=>{
   const database = {
     version: '1.0',
@@ -373,13 +373,19 @@ document.getElementById('exportDatabase').onclick=()=>{
   a.href = url;
   a.download = filename;
   
-  // Inserisce, clicca e rimuove l'elemento per forzare il download.
+  // Inserisce l'elemento nel DOM
   document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  
+  // 💥 TENTATIVO FINALE per Safari: usa setTimeout per dissociare il click
+  setTimeout(() => {
+    a.click();
+    document.body.removeChild(a);
+    // Rilascia la memoria per l'Object URL dopo il click
+    URL.revokeObjectURL(url); 
+  }, 0);
   
   // Istruzioni chiare per l'utente, specialmente su Safari/iOS
-  alert('✅ Database esportato come ' + filename + '!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. Dovrebbe apparire una freccia blu in alto a destra (accanto alla barra degli indirizzi).\n2. Clicca sulla freccia per vedere il download e assicurati che il file sia stato salvato nella cartella "Download" di iCloud o sul tuo iPhone.\n\n***IMPORTANTE per il ripristino***\nPrima di importare il file, devi rinominarlo da **.txt** a **.json** utilizzando l\'app "File" di Apple.');
+  alert('✅ Database in fase di esportazione come ' + filename + '!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. **GUARDA IN ALTO:** Dovrebbe apparire una freccia blu di download (accanto alla barra degli indirizzi).\n2. Clicca sulla freccia per vedere il download e assicurati che il file sia stato salvato nella cartella "Download" di iCloud o sul tuo iPhone.\n\n***IMPORTANTE per il ripristino***\nPrima di importare il file, devi rinominarlo da **.txt** a **.json** utilizzando l\'app "File" di Apple.');
 };
 
 // 🆕 IMPORTA DATABASE
