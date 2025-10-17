@@ -146,7 +146,6 @@ window.addEventListener("DOMContentLoaded",()=>{
 });
 </script>
 
-<!-- 🆕 SEZIONE IMPORT/EXPORT DATABASE -->
 <div class="import-export-section">
   <h4>💾 Import/Export Database</h4>
   <div style="font-size:13px;color:#856404;margin-bottom:10px;">
@@ -192,7 +191,10 @@ function load(){
   const s=localStorage.getItem('eleonora_sections'),
         l=localStorage.getItem('eleonora_logo'),
         e=localStorage.getItem('eleonora_email');
-  if(s)sections=JSON.parse(s);else sections=[{id:uid('sec'),name:'Natale',items:[]}];
+  if(s)sections=JSON.parse(s);
+  // ⛔ MODIFICA: Inizializza a [] se non trova nulla per permettere l'esportazione di un database vuoto.
+  else sections=[]; 
+  
   if(l){
     logoData=l;
     document.getElementById('logoImg').src=l;
@@ -200,6 +202,11 @@ function load(){
     document.querySelector('#logoBox span').style.display='none';
   }
   if(e)document.getElementById('emailDest').value=e;
+  
+  // Aggiunge la sezione di default 'Natale' solo se non ci sono sezioni e non c'è nulla in localStorage
+  if(!s && sections.length === 0) {
+    sections.push({id:uid('sec'),name:'Natale',items:[]});
+  }
 }
 
 function updateTotal(){
@@ -382,8 +389,9 @@ document.getElementById('importDatabase').onchange=e=>{
       const database = JSON.parse(ev.target.result);
       
       // Validazione base
+      // 🟢 MODIFICA: Controllo solo che esista la proprietà e che sia un array. Se è un array vuoto è OK.
       if(!database.sections || !Array.isArray(database.sections)) {
-        throw new Error('File non valido: manca la struttura sezioni');
+        throw new Error('File non valido: manca la struttura sezioni o non è un formato array.');
       }
       
       // Importa tutto
@@ -503,12 +511,10 @@ document.getElementById('exportHtml').onclick=()=>{
     @keyframes showContent{to{opacity:1;}}
   </style></head><body>
   
-  <!-- INTRO ANIMATA -->
   <div id="intro">
     ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D'Arte Eleonora</div>`}
   </div>
 
-  <!-- CONTENUTO NORMALE -->
   <div id="content">
   ${logoData?`<div class="logoBox"><img src="${logoData}"></div>`:`<div class="logoBox">Logo</div>`}
   <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D'Arte Eleonora</h1>
