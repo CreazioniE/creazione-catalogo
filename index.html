@@ -362,20 +362,19 @@ document.getElementById('exportDatabase').onclick=()=>{
   };
   
   const dataStr = JSON.stringify(database, null, 2);
-  const blob = new Blob([dataStr], {type: 'application/json'});
+  const filename = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
   
-  // 🟢 MODIFICA: Ripristinato il solo download (più affidabile)
-  const url = URL.createObjectURL(blob);
+  // 🟢 MODIFICA: Utilizzo della tecnica data-uri, più affidabile per i download su mobile.
+  const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+  
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+  a.href = dataUri;
+  a.download = filename;
   
-  // Aggiunge e rimuove il link dal DOM per forzare il download su alcuni browser
+  // Inserisce, clicca e rimuove l'elemento per forzare il download.
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a); 
-  
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
   
   alert('✅ Database esportato e scaricato! Cercalo nella cartella "Download" e condividilo da lì per il trasferimento.');
 };
