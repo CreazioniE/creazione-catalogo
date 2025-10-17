@@ -127,6 +127,24 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   flex-wrap:wrap;
   margin-top:8px;
 }
+/* Stile per l'area di testo di esportazione */
+#databaseOutput {
+    margin-top: 15px;
+    padding: 10px;
+    background: #f7f7f7;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+#databaseOutput textarea {
+    width: 100%;
+    min-height: 200px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 12px;
+    font-family: monospace;
+    resize: vertical;
+}
 </style>
 </head>
 <body>
@@ -152,12 +170,13 @@ window.addEventListener("DOMContentLoaded",()=>{
     Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
   </div>
   <div class="button-group">
-    <button class="btn-export" id="exportDatabase">📦 Esporta Database (.txt)</button>
+    <button class="btn-export" id="exportDatabase">📦 Esporta Database (Modalità Manuale)</button>
     <label class="btn-import">
       📥 Importa Database
-      <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
+      <input id="importDatabase" type="file" accept=".json,.txt,application/json" style="display:none;">
     </label>
   </div>
+  <div id="databaseOutput" style="display:none;"></div>
 </div>
 
 <div class="panel">
@@ -179,33 +198,121 @@ window.addEventListener("DOMContentLoaded",()=>{
 let sections=[],logoData=null;
 const main=document.getElementById('mainContent');
 
-function uid(p='id'){return p+'_'+Math.floor(Math.random()*1e9).toString(36);}
+// 🟢 INIZIO: FUNZIONI PER INDEXEDDB (SOSTITUISCE LOCALSTORAGE)
+const DB_NAME = 'EleonoraCatalogDB';
+const STORE_NAME = 'dataStore';
+let db;
 
-function save(){
-  localStorage.setItem('eleonora_sections',JSON.stringify(sections));
-  localStorage.setItem('eleonora_logo',logoData||'');
-  localStorage.setItem('eleonora_email',document.getElementById('emailDest').value);
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    
+    request.onerror = event => {
+        console.error('IndexedDB error:', event.target.error);
+        reject('IndexedDB non disponibile o errore: ' + event.target.error.name);
+    };
+    
+    request.onupgradeneeded = event => {
+      db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    
+    request.onsuccess = event => {
+      db = event.target.result;
+      resolve(db);
+    };
+  });
 }
 
-function load(){
-  const s=localStorage.getItem('eleonora_sections'),
-        l=localStorage.getItem('eleonora_logo'),
-        e=localStorage.getItem('eleonora_email');
-  if(s)sections=JSON.parse(s);
-  // ⛔ MODIFICA: Inizializza a [] se non trova nulla per permettere l'esportazione di un database vuoto.
-  else sections=[]; 
-  
-  if(l){
-    logoData=l;
-    document.getElementById('logoImg').src=l;
-    document.getElementById('logoImg').style.display='block';
-    document.querySelector('#logoBox span').style.display='none';
+function getData(key) {
+  return new Promise(async (resolve, reject) => {
+    if (!db) { await openDB(); }
+    try {
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(key);
+        
+        request.onerror = event => reject('Get error: ' + event.target.error.name);
+        request.onsuccess = event => resolve(event.target.result);
+    } catch(e) {
+        reject('Errore durante la transazione DB: ' + e.message);
+    }
+  });
+}
+
+function putData(key, value) {
+  return new Promise(async (resolve, reject) => {
+    if (!db) { await openDB(); }
+    try {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put(value, key);
+        
+        request.onerror = event => reject('Put error: ' + event.target.error.name);
+        request.onsuccess = () => resolve();
+    } catch(e) {
+        reject('Errore durante la transazione DB: ' + e.message);
+    }
+  });
+}
+
+function clearDB() {
+    return new Promise(async (resolve, reject) => {
+        if (!db) { await openDB(); }
+        try {
+            const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).clear();
+            request.onsuccess = () => resolve();
+            request.onerror = (e) => reject('Errore durante il reset: ' + e.target.error.name);
+        } catch(e) {
+            reject('Errore durante la transazione DB: ' + e.message);
+        }
+    });
+}
+// 🔴 FINE: FUNZIONI PER INDEXEDDB
+
+function uid(p='id'){return p+'_'+Math.floor(Math.random()*1e9).toString(36);}
+
+// 🟢 save() ORA È ASINCRONA E USA IndexedDB
+async function save(){
+  try {
+      await putData('eleonora_sections', sections);
+      await putData('eleonora_logo', logoData || '');
+      await putData('eleonora_email', document.getElementById('emailDest').value);
+  } catch (error) {
+      console.error("Save failed:", error);
+      alert('ATTENZIONE: Salvataggio fallito! Probabilmente la memoria interna è piena o non disponibile. Errore: ' + error);
   }
-  if(e)document.getElementById('emailDest').value=e;
-  
-  // Aggiunge la sezione di default 'Natale' solo se non ci sono sezioni e non c'è nulla in localStorage
-  if(!s && sections.length === 0) {
-    sections.push({id:uid('sec'),name:'Natale',items:[]});
+}
+
+// 🟢 load() ORA È ASINCRONA E USA IndexedDB
+async function load(){
+  try {
+      await openDB(); // Assicura che il DB sia aperto prima di caricare
+      const s = await getData('eleonora_sections');
+      const l = await getData('eleonora_logo');
+      const e = await getData('eleonora_email');
+
+      if(s) sections = s;
+      else sections = []; 
+      
+      // Aggiunge la sezione di default 'Natale' solo se non ci sono sezioni e non c'è nulla in DB
+      if(!s && sections.length === 0) {
+        sections.push({id:uid('sec'),name:'Natale',items:[]});
+      }
+
+      if(l){
+        logoData = l;
+        document.getElementById('logoImg').src = l;
+        document.getElementById('logoImg').style.display = 'block';
+        document.querySelector('#logoBox span').style.display='none';
+      }
+      if(e) document.getElementById('emailDest').value = e;
+
+  } catch (error) {
+      console.error("Load failed:", error);
+      alert('ATTENZIONE: Caricamento database fallito. Inizializzazione con dati vuoti.');
   }
 }
 
@@ -227,6 +334,7 @@ function nextCode(){
   return max+1;
 }
 
+// 🟢 addPhoto() ORA È ASINCRONA
 function addPhoto(sec){
   const inp=document.createElement('input');
   inp.type='file';inp.multiple=true;inp.accept='image/*';
@@ -236,7 +344,7 @@ function addPhoto(sec){
       const r=new FileReader();
       r.onload=ev=>{
         const img=new Image();
-        img.onload=()=>{
+        img.onload=async ()=>{
           const max=800;let w=img.width,h=img.height;
           if(w>h&&w>max){h=h*max/w;w=max;}
           else if(h>max){w=w*max/h;h=max;}
@@ -253,7 +361,7 @@ function addPhoto(sec){
             qty:0,
             fav:false
           });
-          save();render();
+          await save();render();
         };
         img.src=ev.target.result;
       };
@@ -291,14 +399,14 @@ function render(){
       `;
       grid.appendChild(c);
 
-      c.querySelector('.note').oninput=e=>{it.note=e.target.textContent;save();};
-      c.querySelector('input[type=checkbox]').onchange=e=>{it.fav=e.target.checked;save();};
-      c.querySelector('.qty').onchange=e=>{it.qty=parseInt(e.target.value)||0;save();};
+      c.querySelector('.note').oninput=async e=>{it.note=e.target.textContent;await save();};
+      c.querySelector('input[type=checkbox]').onchange=async e=>{it.fav=e.target.checked;await save();};
+      c.querySelector('.qty').onchange=async e=>{it.qty=parseInt(e.target.value)||0;await save();};
 
-      c.querySelector('.del-photo').onclick=()=>{
+      c.querySelector('.del-photo').onclick=async ()=>{
         if(confirm('Vuoi eliminare questa foto?')){
           sec.items = sec.items.filter(x=>x.id!==it.id);
-          save();render();
+          await save();render();
         }
       };
     });
@@ -310,23 +418,23 @@ function render(){
 
     s.querySelector('.btn-ghost').onclick=()=>addPhoto(sec);
 
-    s.querySelector('.del').onclick=()=>{
+    s.querySelector('.del').onclick=async ()=>{
       if(confirm('Vuoi eliminare la sezione "'+sec.name+'"?')){
         sections=sections.filter(x=>x.id!==sec.id);
-        save();render();
+        await save();render();
       }
     };
 
     s.addEventListener('dragstart',()=>s.classList.add('dragging'));
-    s.addEventListener('dragend',()=>{s.classList.remove('dragging');save();});
+    s.addEventListener('dragend',async ()=>{s.classList.remove('dragging');await save();});
     main.appendChild(s);
   });
 
-  updateTotal();save();
+  updateTotal();await save();
   enableDrag();
 }
 function enableDrag(){
-  main.addEventListener('dragover',e=>{
+  main.addEventListener('dragover',async e=>{
     e.preventDefault();
     const dragging=document.querySelector('.dragging');
     const after=getDragAfterElement(main,e.clientY);
@@ -336,7 +444,7 @@ function enableDrag(){
       const id=s.querySelector('.btn-ghost').dataset.id;
       return sections.find(x=>x.id===id);
     });
-    save();
+    await save();
   });
 }
 
@@ -351,8 +459,20 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// 🟢 MODIFICA: ESPORTA COME .TXT CON OTTIMIZZAZIONE ASINCRONA PER SAFARI
-document.getElementById('exportDatabase').onclick=()=>{
+// 🟢 MODIFICA: ESPORTA IN MODALITÀ MANUALE PER AGGIRARE I BLOCCHI SAFARI
+document.getElementById('exportDatabase').onclick=async ()=>{
+  const outputDiv = document.getElementById('databaseOutput');
+  
+  if (outputDiv.style.display === 'block') {
+    // Chiudi la finestra se è già aperta
+    outputDiv.style.display = 'none';
+    outputDiv.innerHTML = '';
+    return;
+  }
+  
+  // Assicura che i dati più recenti siano in memoria prima dell'export
+  await load(); 
+
   const database = {
     version: '1.0',
     exportDate: new Date().toISOString(),
@@ -362,33 +482,30 @@ document.getElementById('exportDatabase').onclick=()=>{
   };
   
   const dataStr = JSON.stringify(database, null, 2);
-  // Usa estensione .txt
   const filename = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.txt`;
   
-  // Usa MIME type text/plain
-  const blob = new Blob([dataStr], {type: 'text/plain'});
-  const url = URL.createObjectURL(blob);
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  
-  // Inserisce l'elemento nel DOM
-  document.body.appendChild(a);
-  
-  // 💥 TENTATIVO FINALE per Safari: usa setTimeout per dissociare il click
-  setTimeout(() => {
-    a.click();
-    document.body.removeChild(a);
-    // Rilascia la memoria per l'Object URL dopo il click
-    URL.revokeObjectURL(url); 
-  }, 0);
-  
-  // Istruzioni chiare per l'utente, specialmente su Safari/iOS
-  alert('✅ Database in fase di esportazione come ' + filename + '!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. **GUARDA IN ALTO:** Dovrebbe apparire una freccia blu di download (accanto alla barra degli indirizzi).\n2. Clicca sulla freccia per vedere il download e assicurati che il file sia stato salvato nella cartella "Download" di iCloud o sul tuo iPhone.\n\n***IMPORTANTE per il ripristino***\nPrima di importare il file, devi rinominarlo da **.txt** a **.json** utilizzando l\'app "File" di Apple.');
+  outputDiv.innerHTML = `
+    <div style="font-weight:bold; color:#856404; margin-bottom:10px;">
+      ❌ ATTENZIONE: Il tuo browser (Safari su iOS) blocca il download automatico.
+    </div>
+    <div style="font-size:13px; margin-bottom:10px;">
+      Per esportare, segui questi 3 semplici passaggi:
+      <ol style="padding-left: 20px; margin: 5px 0;">
+        <li>**Tocca** l'area di testo sottostante e seleziona **TUTTO** il contenuto.</li>
+        <li>**Copia** il testo selezionato.</li>
+        <li>Apri l'app **File** (o Note), crea un nuovo file vuoto e **incolla** il testo. Salva il file e assicurati che l'estensione sia **.json** per la futura importazione.</li>
+      </ol>
+      <button onclick="document.getElementById('manualData').select(); document.execCommand('copy'); alert('Testo copiato!');" class="btn-ghost" style="width: 100%; margin-top: 5px;">
+        📋 Seleziona e Copia Tutto
+      </button>
+    </div>
+    <textarea id="manualData" readonly>${dataStr}</textarea>
+  `;
+  outputDiv.style.display = 'block';
+  document.getElementById('manualData').focus();
 };
 
-// 🆕 IMPORTA DATABASE
+// 🟢 IMPORTA DATABASE ORA SALVA SU INDEXEDDB
 document.getElementById('importDatabase').onchange=e=>{
   const file = e.target.files[0];
   if(!file) return;
@@ -399,7 +516,7 @@ document.getElementById('importDatabase').onchange=e=>{
   }
   
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       const database = JSON.parse(ev.target.result);
       
@@ -427,8 +544,8 @@ document.getElementById('importDatabase').onchange=e=>{
         document.getElementById('emailDest').value = database.email;
       }
       
-      // Salva e renderizza
-      save();
+      // Salva (su IndexedDB) e renderizza
+      await save();
       render();
       
       alert('✅ Database importato con successo!\n\n' + 
@@ -437,7 +554,7 @@ document.getElementById('importDatabase').onchange=e=>{
             `📅 Esportato il: ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
       
     } catch(err) {
-      alert('❌ Errore durante l\'importazione:\n' + err.message);
+      alert('❌ Errore durante l\'importazione:\n' + err.message + '\n\nAssicurati che il file non sia corrotto e che termini con .json (o .txt se lo hai rinominato).');
       console.error(err);
     }
     
@@ -448,12 +565,13 @@ document.getElementById('importDatabase').onchange=e=>{
   reader.readAsText(file);
 };
 
-document.getElementById('addSectionBtn').onclick=()=>{
+// 🟢 addSectionBtn ORA È ASINCRONA
+document.getElementById('addSectionBtn').onclick=async ()=>{
   const n=document.getElementById('newSectionName').value.trim();
   if(!n)return alert('Scrivi un nome sezione!');
   sections.push({id:uid('sec'),name:n,items:[]});
   document.getElementById('newSectionName').value='';
-  save();render();
+  await save();render();
 };
 document.getElementById('newSectionName').addEventListener('keypress', e => {
   if (e.key === 'Enter') {
@@ -461,25 +579,31 @@ document.getElementById('newSectionName').addEventListener('keypress', e => {
     document.getElementById('addSectionBtn').click();
   }
 });
+// 🟢 logoInput ORA È ASINCRONO
 document.getElementById('logoInput').onchange=e=>{
   const f=e.target.files[0];
   if(!f)return;
   const r=new FileReader();
-  r.onload=a=>{
+  r.onload=async a=>{
     logoData=a.target.result;
     const img=document.getElementById('logoImg');
     img.src=logoData;
     img.style.display='block';
     document.querySelector('#logoBox span').style.display='none';
-    save();
+    await save();
   };
   r.readAsDataURL(f);
 };
 
-document.getElementById('resetStorage').onclick=()=>{
-  if(confirm('Eliminare tutto?')){
-    localStorage.clear();
-    location.reload();
+// 🟢 resetStorage ORA È ASINCRONO E CANCELLA IndexedDB
+document.getElementById('resetStorage').onclick=async ()=>{
+  if(confirm('Eliminare tutto? Verranno rimossi anche il logo e l\'email salvata.')){
+    try {
+        await clearDB();
+        location.reload();
+    } catch (error) {
+        alert('Errore durante il reset del database: ' + error);
+    }
   }
 };
 
@@ -581,7 +705,11 @@ document.getElementById('exportHtml').onclick=()=>{
   a.click();
 };
 
-load();render();
+// 🟢 ESECUZIONE PRINCIPALE ORA ASINCRONA
+(async () => {
+    await load();
+    render();
+})();
 </script>
 </body>
 </html>
