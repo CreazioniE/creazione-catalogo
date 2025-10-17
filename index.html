@@ -364,13 +364,21 @@ document.getElementById('exportDatabase').onclick=()=>{
   const dataStr = JSON.stringify(database, null, 2);
   const filename = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
   
-  // 🟢 STRATEGIA PER SAFARI (iOS): Aprire i dati in una nuova scheda.
-  const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+  // 🟢 STRATEGIA PIÙ ROBUSTA PER GRANDI FILE (Blob/Object URL)
+  const blob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
   
-  // Apri in una nuova scheda. L'utente deve salvare manualmente.
-  window.open(dataUri, '_blank');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
   
-  alert('✅ Database esportato con successo!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. È stata aperta una nuova scheda con il testo del database.\n2. In alto, tocca l\'**icona di Condivisione** (un quadrato con una freccia che esce).\n3. Seleziona l\'opzione **"Salva su File"** per salvare il database con nome ' + filename);
+  // Inserisce, clicca e rimuove l'elemento per forzare il download.
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  
+  // Istruzioni chiare per l'utente, specialmente su Safari/iOS
+  alert('✅ Database esportato con successo!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. Dovrebbe apparire una freccia blu in alto a destra (accanto alla barra degli indirizzi).\n2. Clicca sulla freccia per vedere il download e assicurati che il file sia stato salvato nella cartella "Download" di iCloud o sul tuo iPhone.');
 };
 
 // 🆕 IMPORTA DATABASE
