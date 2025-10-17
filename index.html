@@ -146,14 +146,14 @@ window.addEventListener("DOMContentLoaded",()=>{
 });
 </script>
 
+<!-- 🆕 SEZIONE IMPORT/EXPORT DATABASE -->
 <div class="import-export-section">
   <h4>💾 Import/Export Database</h4>
   <div style="font-size:13px;color:#856404;margin-bottom:10px;">
     Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
-    **Ora si aprirà in una nuova finestra. Copia il testo e salvalo in un file .json.**
   </div>
   <div class="button-group">
-    <button class="btn-export" id="exportDatabase">📦 Esporta Database (Testo)</button>
+    <button class="btn-export" id="exportDatabase">📦 Esporta Database (.json)</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
@@ -344,7 +344,7 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// 🔄 MODIFICA RICHIESTA: ESPORTA DATABASE come testo in una nuova scheda
+// 🆕 ESPORTA DATABASE
 document.getElementById('exportDatabase').onclick=()=>{
   const database = {
     version: '1.0',
@@ -355,18 +355,15 @@ document.getElementById('exportDatabase').onclick=()=>{
   };
   
   const dataStr = JSON.stringify(database, null, 2);
+  const blob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
   
-  // Apri una nuova finestra con il contenuto JSON in formato testo
-  const newWindow = window.open();
-  newWindow.document.write('<html><head><title>Database Export</title></head><body>');
-  newWindow.document.write('<h1 style="font-family:sans-serif;">Copia il testo qui sotto (è il tuo database JSON)</h1>');
-  newWindow.document.write('<textarea style="width:100%;height:90vh;font-family:monospace;padding:10px;box-sizing:border-box;">');
-  newWindow.document.write(dataStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-  newWindow.document.write('</textarea>');
-  newWindow.document.write('</body></html>');
-  newWindow.document.close();
-  
-  alert('✅ Database pronto! Una nuova finestra è stata aperta. Copia il testo e salvalo in un file chiamato "backup.json" per importarlo su un altro dispositivo.');
+  alert('✅ Database esportato! Ora puoi inviartelo via email/WhatsApp e importarlo su un altro dispositivo.');
 };
 
 // 🆕 IMPORTA DATABASE
@@ -506,10 +503,12 @@ document.getElementById('exportHtml').onclick=()=>{
     @keyframes showContent{to{opacity:1;}}
   </style></head><body>
   
+  <!-- INTRO ANIMATA -->
   <div id="intro">
     ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D'Arte Eleonora</div>`}
   </div>
 
+  <!-- CONTENUTO NORMALE -->
   <div id="content">
   ${logoData?`<div class="logoBox"><img src="${logoData}"></div>`:`<div class="logoBox">Logo</div>`}
   <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D'Arte Eleonora</h1>
