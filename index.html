@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Creazioni D'Arte Eleonora — Catalogo</title>
+<title>Creazioni D'Arte Eleonora – Catalogo</title>
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -54,6 +54,20 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   padding:8px 14px;border-radius:12px;border:1px dashed rgba(0,0,0,0.1);
   background:#fff;cursor:pointer;
 }
+.btn-import{
+  padding:8px 14px;border-radius:12px;border:0;
+  background:linear-gradient(135deg,#90EE90,#32CD32);
+  color:#fff;font-weight:600;cursor:pointer;
+  box-shadow:0 3px 8px rgba(0,0,0,0.1);
+}
+.btn-import:hover{box-shadow:0 0 10px rgba(144,238,144,0.8);}
+.btn-export{
+  padding:8px 14px;border-radius:12px;border:0;
+  background:linear-gradient(135deg,#FFD700,#FFA500);
+  color:#fff;font-weight:600;cursor:pointer;
+  box-shadow:0 3px 8px rgba(0,0,0,0.1);
+}
+.btn-export:hover{box-shadow:0 0 10px rgba(255,215,0,0.8);}
 .panel{
   background:#fff;border-radius:16px;padding:14px;margin-bottom:14px;
   box-shadow:0 4px 18px rgba(0,0,0,0.08);
@@ -94,6 +108,25 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
 .controls{display:flex;gap:8px;align-items:center;justify-content:space-between;}
 .qty{width:60px;padding:6px;border-radius:6px;border:1px solid #ccc;text-align:center;}
 .fav{display:flex;align-items:center;gap:5px;}
+.import-export-section{
+  background:#fff3cd;
+  border:2px dashed #ffc107;
+  border-radius:12px;
+  padding:14px;
+  margin-bottom:14px;
+}
+.import-export-section h4{
+  margin:0 0 10px 0;
+  color:#856404;
+  font-family:'Dancing Script',cursive;
+  font-size:20px;
+}
+.button-group{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:8px;
+}
 </style>
 </head>
 <body>
@@ -112,6 +145,21 @@ window.addEventListener("DOMContentLoaded",()=>{
   requestAnimationFrame(()=>logoBox.classList.add("show"));
 });
 </script>
+
+<!-- 🆕 SEZIONE IMPORT/EXPORT DATABASE -->
+<div class="import-export-section">
+  <h4>💾 Import/Export Database</h4>
+  <div style="font-size:13px;color:#856404;margin-bottom:10px;">
+    Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
+  </div>
+  <div class="button-group">
+    <button class="btn-export" id="exportDatabase">📦 Esporta Database (.json)</button>
+    <label class="btn-import">
+      📥 Importa Database
+      <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
+    </label>
+  </div>
+</div>
 
 <div class="panel">
   <label class="btn">Carica logo<input id="logoInput" type="file" accept="image/*" style="display:none;"></label>
@@ -296,6 +344,87 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
+// 🆕 ESPORTA DATABASE
+document.getElementById('exportDatabase').onclick=()=>{
+  const database = {
+    version: '1.0',
+    exportDate: new Date().toISOString(),
+    logo: logoData,
+    email: document.getElementById('emailDest').value,
+    sections: sections
+  };
+  
+  const dataStr = JSON.stringify(database, null, 2);
+  const blob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  alert('✅ Database esportato! Ora puoi inviartelo via email/WhatsApp e importarlo su un altro dispositivo.');
+};
+
+// 🆕 IMPORTA DATABASE
+document.getElementById('importDatabase').onchange=e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  
+  if(!confirm('⚠️ ATTENZIONE: L\'importazione sostituirà tutti i dati attuali. Continuare?')) {
+    e.target.value = '';
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const database = JSON.parse(ev.target.result);
+      
+      // Validazione base
+      if(!database.sections || !Array.isArray(database.sections)) {
+        throw new Error('File non valido: manca la struttura sezioni');
+      }
+      
+      // Importa tutto
+      sections = database.sections;
+      logoData = database.logo || null;
+      
+      // Aggiorna logo
+      if(logoData) {
+        document.getElementById('logoImg').src = logoData;
+        document.getElementById('logoImg').style.display = 'block';
+        document.querySelector('#logoBox span').style.display = 'none';
+      } else {
+        document.getElementById('logoImg').style.display = 'none';
+        document.querySelector('#logoBox span').style.display = 'block';
+      }
+      
+      // Aggiorna email
+      if(database.email) {
+        document.getElementById('emailDest').value = database.email;
+      }
+      
+      // Salva e renderizza
+      save();
+      render();
+      
+      alert('✅ Database importato con successo!\n\n' + 
+            `📦 Sezioni: ${sections.length}\n` +
+            `📸 Foto totali: ${sections.reduce((tot,s)=>tot+s.items.length,0)}\n` +
+            `📅 Esportato il: ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
+      
+    } catch(err) {
+      alert('❌ Errore durante l\'importazione:\n' + err.message);
+      console.error(err);
+    }
+    
+    e.target.value = '';
+  };
+  
+  reader.readAsText(file);
+};
+
 document.getElementById('addSectionBtn').onclick=()=>{
   const n=document.getElementById('newSectionName').value.trim();
   if(!n)return alert('Scrivi un nome sezione!');
@@ -357,8 +486,8 @@ document.getElementById('exportHtml').onclick=()=>{
       animation:fadeOut 1s ease 2.5s forwards;
     }
     #intro img{
-      width:280px;               /* ⬅️ ingrandito del doppio */
-      height:280px;              /* ⬅️ ingrandito del doppio */
+      width:280px;
+      height:280px;
       object-fit:contain;
       opacity:0;
       animation:logoIn 1.2s ease forwards;
@@ -376,13 +505,13 @@ document.getElementById('exportHtml').onclick=()=>{
   
   <!-- INTRO ANIMATA -->
   <div id="intro">
-    ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D’Arte Eleonora</div>`}
+    ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D'Arte Eleonora</div>`}
   </div>
 
   <!-- CONTENUTO NORMALE -->
   <div id="content">
   ${logoData?`<div class="logoBox"><img src="${logoData}"></div>`:`<div class="logoBox">Logo</div>`}
-  <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D’Arte Eleonora</h1>
+  <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D'Arte Eleonora</h1>
 
   <input id="clienteNome" placeholder="Nome cliente" style="width:60%;padding:8px;border:1px solid #ccc;border-radius:8px;display:block;margin:10px auto;text-align:center;font-weight:600;color:#7a3b6f;">
 
