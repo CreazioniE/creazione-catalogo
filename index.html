@@ -176,11 +176,14 @@ window.addEventListener("DOMContentLoaded",()=>{
   </div>
   <div class="button-group">
     <button class="btn-export" id="exportDatabase">📦 Download Database</button>
-    <button class="btn-export" id="shareDatabase">📧 Invia Database via Email</button>
+    <button class="btn-export" id="sendTelegram">📱 Invia su Telegram</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
     </label>
+  </div>
+  <div style="font-size:12px;color:#856404;margin-top:8px;">
+    💡 <strong>Consiglio:</strong> Usa Telegram per trasferire il database tra telefono e PC. Invialo a "Messaggi Salvati"!
   </div>
 </div>
 
@@ -489,10 +492,10 @@ document.getElementById('exportDatabase').onclick=async ()=>{
   }
 };
 
-// 🆕 INVIA DATABASE VIA EMAIL
-document.getElementById('shareDatabase').onclick=async ()=>{
+// 🆕 INVIA SU TELEGRAM
+document.getElementById('sendTelegram').onclick=async ()=>{
   try {
-    showLoading('Preparazione database...');
+    showLoading('Preparazione database per Telegram...');
     
     const database = {
       version: '1.0',
@@ -503,33 +506,87 @@ document.getElementById('shareDatabase').onclick=async ()=>{
     };
     
     const dataStr = JSON.stringify(database);
+    const totalPhotos = sections.reduce((tot,s)=>tot+s.items.length,0);
     
     hideLoading();
     
-    // Prova Web Share API (mobile)
+    // Prova prima con Web Share API (funziona meglio su mobile moderni)
     if (navigator.share && navigator.canShare) {
-      const blob = new Blob([dataStr], {type: 'application/json'});
-      const file = new File([blob], `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`, {type: 'application/json'});
-      
-      if (navigator.canShare({files: [file]})) {
-        await navigator.share({
-          title: 'Database Catalogo Eleonora',
-          text: 'Database completo del catalogo con tutte le foto',
-          files: [file]
-        });
-        alert('✅ Database condiviso!');
-        return;
+      try {
+        const blob = new Blob([dataStr], {type: 'application/json'});
+        const fileName = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+        const file = new File([blob], fileName, {type: 'application/json'});
+        
+        if (navigator.canShare({files: [file]})) {
+          await navigator.share({
+            title: 'Database Catalogo Eleonora',
+            text: `📸 Database con ${totalPhotos} foto\n📅 ${new Date().toLocaleDateString('it-IT')}`,
+            files: [file]
+          });
+          
+          alert('✅ Perfetto! Ora:\n\n1️⃣ Seleziona TELEGRAM\n2️⃣ Cerca "Messaggi Salvati"\n3️⃣ Invia il file\n4️⃣ Sul PC apri Telegram e scaricalo');
+          return;
+        }
+      } catch(e) {
+        console.log('Web Share non disponibile, uso metodo alternativo');
       }
     }
     
-    // Fallback: copia negli appunti
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(dataStr);
-      alert('✅ Database copiato negli appunti!\n\n📋 Ora:\n1. Apri Note/Email/WhatsApp\n2. Incolla il testo\n3. Salva come "database.json"\n4. Invialo a te stesso');
-    } else {
-      // Ultimo fallback: mostra textarea
-      showTextArea(dataStr);
-    }
+    // Metodo alternativo: crea file e apri Telegram Web
+    const blob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Prepara messaggio per Telegram
+    const message = `📦 Database Catalogo Eleonora
+📸 Foto: ${totalPhotos}
+📅 Data: ${new Date().toLocaleDateString('it-IT')}
+💾 File scaricato! Ora caricalo su Telegram.`;
+    
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      
+      const choice = confirm(
+        '✅ File scaricato!\n\n' +
+        'Vuoi aprire Telegram Web per caricarlo?\n\n' +
+        '• OK = Apri Telegram Web\n' +
+        '• Annulla = Aprilo manualmente dall\'app'
+      );
+      
+      if (choice) {
+        // Apri Telegram Web
+        window.open('https://web.telegram.org', '_blank');
+        
+        setTimeout(() => {
+          alert(
+            '📱 ISTRUZIONI:\n\n' +
+            '1️⃣ Accedi a Telegram Web\n' +
+            '2️⃣ Cerca "Messaggi Salvati" (icona bookmark)\n' +
+            '3️⃣ Clicca sulla graffetta 📎\n' +
+            '4️⃣ Carica il file JSON appena scaricato\n' +
+            '5️⃣ Sul PC apri Telegram e scaricalo\n' +
+            '6️⃣ Importalo nel generatore con "📥 Importa Database"'
+          );
+        }, 2000);
+      } else {
+        alert(
+          '📱 ISTRUZIONI:\n\n' +
+          '1️⃣ Apri Telegram sul telefono\n' +
+          '2️⃣ Vai in "Messaggi Salvati"\n' +
+          '3️⃣ Clicca sulla graffetta 📎\n' +
+          '4️⃣ Seleziona "File"\n' +
+          '5️⃣ Cerca e carica il file JSON dalla cartella Download\n' +
+          '6️⃣ Sul PC apri Telegram e scaricalo\n' +
+          '7️⃣ Importalo nel generatore con "📥 Importa Database"'
+        );
+      }
+    }, 500);
+    
   } catch(err) {
     hideLoading();
     alert('❌ Errore: ' + err.message);
