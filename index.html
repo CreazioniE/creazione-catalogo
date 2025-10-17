@@ -127,6 +127,28 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   flex-wrap:wrap;
   margin-top:8px;
 }
+.loading{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:10000;
+  color:#fff;
+  font-size:18px;
+  flex-direction:column;
+  gap:10px;
+}
+.loading-spinner{
+  width:50px;
+  height:50px;
+  border:5px solid rgba(255,255,255,0.3);
+  border-top:5px solid #fff;
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -148,7 +170,7 @@ window.addEventListener("DOMContentLoaded",()=>{
 
 <!-- 🆕 SEZIONE IMPORT/EXPORT DATABASE -->
 <div class="import-export-section">
-  <h4>💾 Import/Export Database</h4>
+  <h4>💾 Import/Export Database (IndexedDB - Illimitato)</h4>
   <div style="font-size:13px;color:#856404;margin-bottom:10px;">
     Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
   </div>
@@ -177,31 +199,109 @@ window.addEventListener("DOMContentLoaded",()=>{
 
 <main class="main" id="mainContent"></main>
 </div>
+
 <script>
 let sections=[],logoData=null;
 const main=document.getElementById('mainContent');
 
-function uid(p='id'){return p+'_'+Math.floor(Math.random()*1e9).toString(36);}
+// 🆕 INDEXEDDB MANAGER
+const DB_NAME = 'EleonoraCatalogo';
+const DB_VERSION = 1;
+let db = null;
 
-function save(){
-  localStorage.setItem('eleonora_sections',JSON.stringify(sections));
-  localStorage.setItem('eleonora_logo',logoData||'');
-  localStorage.setItem('eleonora_email',document.getElementById('emailDest').value);
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      db = request.result;
+      resolve(db);
+    };
+    
+    request.onupgradeneeded = (e) => {
+      const database = e.target.result;
+      
+      // Store per le sezioni
+      if (!database.objectStoreNames.contains('sections')) {
+        database.createObjectStore('sections', { keyPath: 'id' });
+      }
+      
+      // Store per i metadati (logo, email, etc)
+      if (!database.objectStoreNames.contains('metadata')) {
+        database.createObjectStore('metadata', { keyPath: 'key' });
+      }
+    };
+  });
 }
 
-function load(){
-  const s=localStorage.getItem('eleonora_sections'),
-        l=localStorage.getItem('eleonora_logo'),
-        e=localStorage.getItem('eleonora_email');
-  if(s)sections=JSON.parse(s);else sections=[{id:uid('sec'),name:'Natale',items:[]}];
-  if(l){
-    logoData=l;
-    document.getElementById('logoImg').src=l;
-    document.getElementById('logoImg').style.display='block';
-    document.querySelector('#logoBox span').style.display='none';
+async function saveDB() {
+  if (!db) await initDB();
+  
+  const tx = db.transaction(['sections', 'metadata'], 'readwrite');
+  const sectionsStore = tx.objectStore('sections');
+  const metaStore = tx.objectStore('metadata');
+  
+  // Cancella tutto prima
+  await sectionsStore.clear();
+  
+  // Salva sezioni
+  for (const sec of sections) {
+    await sectionsStore.put(sec);
   }
-  if(e)document.getElementById('emailDest').value=e;
+  
+  // Salva metadata
+  await metaStore.put({ key: 'logo', value: logoData });
+  await metaStore.put({ key: 'email', value: document.getElementById('emailDest').value });
+  
+  return tx.complete;
 }
+
+async function loadDB() {
+  if (!db) await initDB();
+  
+  const tx = db.transaction(['sections', 'metadata'], 'readonly');
+  const sectionsStore = tx.objectStore('sections');
+  const metaStore = tx.objectStore('metadata');
+  
+  // Carica sezioni
+  const allSections = await sectionsStore.getAll();
+  if (allSections.length > 0) {
+    sections = allSections;
+  } else {
+    sections = [{id: uid('sec'), name: 'Natale', items: []}];
+  }
+  
+  // Carica logo
+  const logoMeta = await metaStore.get('logo');
+  if (logoMeta && logoMeta.value) {
+    logoData = logoMeta.value;
+    document.getElementById('logoImg').src = logoData;
+    document.getElementById('logoImg').style.display = 'block';
+    document.querySelector('#logoBox span').style.display = 'none';
+  }
+  
+  // Carica email
+  const emailMeta = await metaStore.get('email');
+  if (emailMeta && emailMeta.value) {
+    document.getElementById('emailDest').value = emailMeta.value;
+  }
+}
+
+function showLoading(text = 'Caricamento...') {
+  const loading = document.createElement('div');
+  loading.className = 'loading';
+  loading.id = 'loadingOverlay';
+  loading.innerHTML = `<div class="loading-spinner"></div><div>${text}</div>`;
+  document.body.appendChild(loading);
+}
+
+function hideLoading() {
+  const loading = document.getElementById('loadingOverlay');
+  if (loading) loading.remove();
+}
+
+function uid(p='id'){return p+'_'+Math.floor(Math.random()*1e9).toString(36);}
 
 function updateTotal(){
   let t=0;
@@ -226,11 +326,14 @@ function addPhoto(sec){
   inp.type='file';inp.multiple=true;inp.accept='image/*';
   inp.onchange=e=>{
     const files=Array.from(e.target.files);
+    showLoading(`Caricamento ${files.length} foto...`);
+    
+    let processed = 0;
     files.forEach(file=>{
       const r=new FileReader();
       r.onload=ev=>{
         const img=new Image();
-        img.onload=()=>{
+        img.onload=async ()=>{
           const max=800;let w=img.width,h=img.height;
           if(w>h&&w>max){h=h*max/w;w=max;}
           else if(h>max){w=w*max/h;h=max;}
@@ -247,7 +350,13 @@ function addPhoto(sec){
             qty:0,
             fav:false
           });
-          save();render();
+          
+          processed++;
+          if (processed === files.length) {
+            await saveDB();
+            render();
+            hideLoading();
+          }
         };
         img.src=ev.target.result;
       };
@@ -285,14 +394,15 @@ function render(){
       `;
       grid.appendChild(c);
 
-      c.querySelector('.note').oninput=e=>{it.note=e.target.textContent;save();};
-      c.querySelector('input[type=checkbox]').onchange=e=>{it.fav=e.target.checked;save();};
-      c.querySelector('.qty').onchange=e=>{it.qty=parseInt(e.target.value)||0;save();};
+      c.querySelector('.note').oninput=async e=>{it.note=e.target.textContent;await saveDB();};
+      c.querySelector('input[type=checkbox]').onchange=async e=>{it.fav=e.target.checked;await saveDB();};
+      c.querySelector('.qty').onchange=async e=>{it.qty=parseInt(e.target.value)||0;await saveDB();};
 
-      c.querySelector('.del-photo').onclick=()=>{
+      c.querySelector('.del-photo').onclick=async ()=>{
         if(confirm('Vuoi eliminare questa foto?')){
           sec.items = sec.items.filter(x=>x.id!==it.id);
-          save();render();
+          await saveDB();
+          render();
         }
       };
     });
@@ -304,21 +414,23 @@ function render(){
 
     s.querySelector('.btn-ghost').onclick=()=>addPhoto(sec);
 
-    s.querySelector('.del').onclick=()=>{
+    s.querySelector('.del').onclick=async ()=>{
       if(confirm('Vuoi eliminare la sezione "'+sec.name+'"?')){
         sections=sections.filter(x=>x.id!==sec.id);
-        save();render();
+        await saveDB();
+        render();
       }
     };
 
     s.addEventListener('dragstart',()=>s.classList.add('dragging'));
-    s.addEventListener('dragend',()=>{s.classList.remove('dragging');save();});
+    s.addEventListener('dragend',async ()=>{s.classList.remove('dragging');await saveDB();});
     main.appendChild(s);
   });
 
-  updateTotal();save();
+  updateTotal();
   enableDrag();
 }
+
 function enableDrag(){
   main.addEventListener('dragover',e=>{
     e.preventDefault();
@@ -330,7 +442,6 @@ function enableDrag(){
       const id=s.querySelector('.btn-ghost').dataset.id;
       return sections.find(x=>x.id===id);
     });
-    save();
   });
 }
 
@@ -346,8 +457,10 @@ function getDragAfterElement(container,y){
 }
 
 // 🆕 ESPORTA DATABASE (Download)
-document.getElementById('exportDatabase').onclick=()=>{
+document.getElementById('exportDatabase').onclick=async ()=>{
   try {
+    showLoading('Esportazione database...');
+    
     const database = {
       version: '1.0',
       exportDate: new Date().toISOString(),
@@ -356,7 +469,7 @@ document.getElementById('exportDatabase').onclick=()=>{
       sections: sections
     };
     
-    const dataStr = JSON.stringify(database, null, 2);
+    const dataStr = JSON.stringify(database);
     const blob = new Blob([dataStr], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -367,16 +480,20 @@ document.getElementById('exportDatabase').onclick=()=>{
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
     
+    hideLoading();
     alert('✅ Database esportato! Controlla la cartella Download.');
   } catch(err) {
+    hideLoading();
     alert('❌ Errore durante l\'esportazione:\n' + err.message);
     console.error(err);
   }
 };
 
-// 🆕 INVIA DATABASE VIA EMAIL (Funziona su tutti i dispositivi!)
-document.getElementById('shareDatabase').onclick=()=>{
+// 🆕 INVIA DATABASE VIA EMAIL
+document.getElementById('shareDatabase').onclick=async ()=>{
   try {
+    showLoading('Preparazione database...');
+    
     const database = {
       version: '1.0',
       exportDate: new Date().toISOString(),
@@ -387,70 +504,43 @@ document.getElementById('shareDatabase').onclick=()=>{
     
     const dataStr = JSON.stringify(database);
     
-    // Crea un file temporaneo come data URL
-    const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    hideLoading();
     
-    // Prova a usare Web Share API se disponibile (mobile)
-    if (navigator.share) {
-      // Converti in Blob per lo share
+    // Prova Web Share API (mobile)
+    if (navigator.share && navigator.canShare) {
       const blob = new Blob([dataStr], {type: 'application/json'});
       const file = new File([blob], `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`, {type: 'application/json'});
       
-      navigator.share({
-        title: 'Database Catalogo Eleonora',
-        text: 'Database completo del catalogo con tutte le foto',
-        files: [file]
-      }).then(() => {
-        alert('✅ Database condiviso! Ora puoi inviarlo via email/WhatsApp a te stesso.');
-      }).catch(err => {
-        // Fallback: usa mailto
-        useFallbackEmail(dataStr);
-      });
+      if (navigator.canShare({files: [file]})) {
+        await navigator.share({
+          title: 'Database Catalogo Eleonora',
+          text: 'Database completo del catalogo con tutte le foto',
+          files: [file]
+        });
+        alert('✅ Database condiviso!');
+        return;
+      }
+    }
+    
+    // Fallback: copia negli appunti
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(dataStr);
+      alert('✅ Database copiato negli appunti!\n\n📋 Ora:\n1. Apri Note/Email/WhatsApp\n2. Incolla il testo\n3. Salva come "database.json"\n4. Invialo a te stesso');
     } else {
-      // Desktop: usa mailto
-      useFallbackEmail(dataStr);
+      // Ultimo fallback: mostra textarea
+      showTextArea(dataStr);
     }
   } catch(err) {
-    alert('❌ Errore durante l\'esportazione:\n' + err.message);
+    hideLoading();
+    alert('❌ Errore: ' + err.message);
     console.error(err);
   }
 };
 
-function useFallbackEmail(dataStr) {
-  // Su alcuni dispositivi il database potrebbe essere troppo grande per mailto
-  // Quindi offriamo di copiarlo negli appunti
-  if(dataStr.length > 50000) {
-    if(confirm('⚠️ Il database è molto grande!\n\nVuoi copiarlo negli appunti? Poi potrai incollarlo in un file di testo e salvarlo.')) {
-      copyToClipboard(dataStr);
-    }
-  } else {
-    // Crea email con il database nel body
-    const subject = encodeURIComponent('Database Catalogo Eleonora');
-    const body = encodeURIComponent('Database esportato il ' + new Date().toLocaleString('it-IT') + '\n\nCopia il testo qui sotto e salvalo come file .json:\n\n' + dataStr);
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-    
-    setTimeout(() => {
-      alert('✅ Email aperta! Se non funziona, usa il pulsante "Download Database" oppure contattami per alternative.');
-    }, 500);
-  }
-}
-
-function copyToClipboard(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      alert('✅ Database copiato negli appunti!\n\n1. Apri Note/Memo\n2. Incolla il testo\n3. Salvalo come "database.json"\n4. Invialo via email a te stesso');
-    }).catch(err => {
-      showTextArea(text);
-    });
-  } else {
-    showTextArea(text);
-  }
-}
-
 function showTextArea(text) {
   const ta = document.createElement('textarea');
   ta.value = text;
-  ta.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;height:80%;z-index:10000;padding:10px;';
+  ta.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;height:80%;z-index:10000;padding:10px;font-size:12px;';
   document.body.appendChild(ta);
   ta.select();
   
@@ -458,7 +548,7 @@ function showTextArea(text) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;';
   document.body.appendChild(overlay);
   
-  alert('📋 Seleziona tutto il testo (tieni premuto e scegli "Seleziona tutto"), poi copialo e chiudi questa finestra.\n\nPoi incollalo in Note/Memo e salvalo come "database.json"');
+  alert('📋 Seleziona tutto (tieni premuto → "Seleziona tutto"), poi copia e chiudi.\n\nIncollalo in Note e salvalo come "database.json"');
   
   overlay.onclick = () => {
     document.body.removeChild(ta);
@@ -467,7 +557,7 @@ function showTextArea(text) {
 }
 
 // 🆕 IMPORTA DATABASE
-document.getElementById('importDatabase').onchange=e=>{
+document.getElementById('importDatabase').onchange=async e=>{
   const file = e.target.files[0];
   if(!file) return;
   
@@ -476,14 +566,15 @@ document.getElementById('importDatabase').onchange=e=>{
     return;
   }
   
+  showLoading('Importazione database...');
+  
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       const database = JSON.parse(ev.target.result);
       
-      // Validazione base
       if(!database.sections || !Array.isArray(database.sections)) {
-        throw new Error('File non valido: manca la struttura sezioni');
+        throw new Error('File non valido');
       }
       
       // Importa tutto
@@ -500,22 +591,24 @@ document.getElementById('importDatabase').onchange=e=>{
         document.querySelector('#logoBox span').style.display = 'block';
       }
       
-      // Aggiorna email
       if(database.email) {
         document.getElementById('emailDest').value = database.email;
       }
       
-      // Salva e renderizza
-      save();
+      // Salva in IndexedDB
+      await saveDB();
       render();
       
-      alert('✅ Database importato con successo!\n\n' + 
+      hideLoading();
+      
+      alert('✅ Database importato!\n\n' + 
             `📦 Sezioni: ${sections.length}\n` +
             `📸 Foto totali: ${sections.reduce((tot,s)=>tot+s.items.length,0)}\n` +
-            `📅 Esportato il: ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
+            `📅 Esportato: ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
       
     } catch(err) {
-      alert('❌ Errore durante l\'importazione:\n' + err.message);
+      hideLoading();
+      alert('❌ Errore importazione:\n' + err.message);
       console.error(err);
     }
     
@@ -525,37 +618,42 @@ document.getElementById('importDatabase').onchange=e=>{
   reader.readAsText(file);
 };
 
-document.getElementById('addSectionBtn').onclick=()=>{
+document.getElementById('addSectionBtn').onclick=async ()=>{
   const n=document.getElementById('newSectionName').value.trim();
   if(!n)return alert('Scrivi un nome sezione!');
   sections.push({id:uid('sec'),name:n,items:[]});
   document.getElementById('newSectionName').value='';
-  save();render();
+  await saveDB();
+  render();
 };
-document.getElementById('newSectionName').addEventListener('keypress', e => {
+
+document.getElementById('newSectionName').addEventListener('keypress', async e => {
   if (e.key === 'Enter') {
     e.preventDefault();
     document.getElementById('addSectionBtn').click();
   }
 });
-document.getElementById('logoInput').onchange=e=>{
+
+document.getElementById('logoInput').onchange=async e=>{
   const f=e.target.files[0];
   if(!f)return;
   const r=new FileReader();
-  r.onload=a=>{
+  r.onload=async a=>{
     logoData=a.target.result;
     const img=document.getElementById('logoImg');
     img.src=logoData;
     img.style.display='block';
     document.querySelector('#logoBox span').style.display='none';
-    save();
+    await saveDB();
   };
   r.readAsDataURL(f);
 };
 
-document.getElementById('resetStorage').onclick=()=>{
+document.getElementById('resetStorage').onclick=async ()=>{
   if(confirm('Eliminare tutto?')){
-    localStorage.clear();
+    if (db) {
+      indexedDB.deleteDatabase(DB_NAME);
+    }
     location.reload();
   }
 };
@@ -576,8 +674,6 @@ document.getElementById('exportHtml').onclick=()=>{
     .btn{padding:10px 16px;border-radius:12px;border:0;background:linear-gradient(135deg,#c9b7ff,#f7d1e0);color:#fff;font-weight:600;cursor:pointer;display:block;margin:10px auto;}
     .logoBox{width:120px;height:120px;margin:0 auto 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#f7f3ff;}
     .logoBox img{max-width:100%;max-height:100%;object-fit:contain;}
-
-     /* 👇 ANIMAZIONE INTRO LOGO */
     #intro{
       position:fixed;inset:0;
       background:linear-gradient(135deg,#fdf5f9,#f3e7ff);
@@ -591,76 +687,3 @@ document.getElementById('exportHtml').onclick=()=>{
       object-fit:contain;
       opacity:0;
       animation:logoIn 1.2s ease forwards;
-    }
-    @keyframes logoIn{
-      0%{opacity:0;transform:scale(0.8);}
-      100%{opacity:1;transform:scale(1);}
-    }
-    @keyframes fadeOut{
-      to{opacity:0;visibility:hidden;}
-    }
-    #content{opacity:0;animation:showContent 1s ease 2.5s forwards;}
-    @keyframes showContent{to{opacity:1;}}
-  </style></head><body>
-  
-  <!-- INTRO ANIMATA -->
-  <div id="intro">
-    ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D'Arte Eleonora</div>`}
-  </div>
-
-  <!-- CONTENUTO NORMALE -->
-  <div id="content">
-  ${logoData?`<div class="logoBox"><img src="${logoData}"></div>`:`<div class="logoBox">Logo</div>`}
-  <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D'Arte Eleonora</h1>
-
-  <input id="clienteNome" placeholder="Nome cliente" style="width:60%;padding:8px;border:1px solid #ccc;border-radius:8px;display:block;margin:10px auto;text-align:center;font-weight:600;color:#7a3b6f;">
-
-  ${sections.map(sec=>`<section><div class="head"><h3 style="margin:0;font-family:'Dancing Script',cursive;color:#7a3b6f">${sec.name}</h3><span>▼</span></div><div class="cards">
-  ${sec.items.map(it=>`<div style="background:#fff;padding:6px;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,0.05)">
-  <img src="${it.img}"><div style="font-weight:700;color:#c64d6f">${it.code}</div><div>${it.note||''}</div>
-  <div><label><input type="checkbox"> 💕</label> <input type="number" min="0" value="${it.qty}" style="width:60px"></div></div>`).join('')}
-  </div></section>`).join('')}
-  
-  <button class="btn" id="sendWhats">📩 Invia selezione su WhatsApp</button>
-  <button class="btn" id="sendEmail">📧 Invia via Email</button>
-  </div>
-
-  <script>
-  document.querySelectorAll('.head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
-  function genMsg(){
-    const nome=document.getElementById('clienteNome').value.trim();
-    let msg='Ordine'+(nome?' di '+nome:'')+'%0A%0A';
-    document.querySelectorAll('section').forEach(sec=>{
-      sec.querySelectorAll('.cards > div').forEach(card=>{
-        const chk=card.querySelector('input[type=checkbox]');
-        if(chk.checked){
-          const code=card.querySelector('div:nth-child(2)').innerText;
-          const note=card.querySelector('div:nth-child(3)').innerText;
-          const qty=card.querySelector('input[type=number]').value;
-          msg+=code+' – '+note+' (x'+qty+')%0A';
-        }
-      });
-    });
-    return msg;
-  }
-  document.getElementById('sendWhats').onclick=()=>{
-    const m=genMsg();
-    window.open('https://wa.me/?text='+m,'_blank');
-  };
-  document.getElementById('sendEmail').onclick=()=>{
-    const m=genMsg();
-    window.location.href='mailto:${email}?subject=Ordine Creazioni D\\'Arte Eleonora&body='+m.replace(/%0A/g,'%0D%0A');
-  };
-  <\/script></body></html>`;
-
-  const blob=new Blob([clienteHtml],{type:'text/html'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='catalogo_cliente.html';
-  a.click();
-};
-
-load();render();
-</script>
-</body>
-</html>
