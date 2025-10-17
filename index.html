@@ -94,7 +94,7 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   gap:12px;background:#fff;
 }
 .section.open .cards{display:grid;animation:fadecards .3s ease;}
-@keyframes fadecards{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}
+@keyframes fadecards{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}
 .card{
   background:#fff;border-radius:12px;padding:10px;
   box-shadow:0 3px 10px rgba(0,0,0,0.05);
@@ -363,14 +363,21 @@ document.getElementById('exportDatabase').onclick=()=>{
   
   const dataStr = JSON.stringify(database, null, 2);
   const blob = new Blob([dataStr], {type: 'application/json'});
+  
+  // 🟢 MODIFICA: Ripristinato il solo download (più affidabile)
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+  
+  // Aggiunge e rimuove il link dal DOM per forzare il download su alcuni browser
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a); 
+  
   URL.revokeObjectURL(url);
   
-  alert('✅ Database esportato! Ora puoi inviartelo via email/WhatsApp e importarlo su un altro dispositivo.');
+  alert('✅ Database esportato e scaricato! Cercalo nella cartella "Download" e condividilo da lì per il trasferimento.');
 };
 
 // 🆕 IMPORTA DATABASE
@@ -389,7 +396,6 @@ document.getElementById('importDatabase').onchange=e=>{
       const database = JSON.parse(ev.target.result);
       
       // Validazione base
-      // 🟢 MODIFICA: Controllo solo che esista la proprietà e che sia un array. Se è un array vuoto è OK.
       if(!database.sections || !Array.isArray(database.sections)) {
         throw new Error('File non valido: manca la struttura sezioni o non è un formato array.');
       }
