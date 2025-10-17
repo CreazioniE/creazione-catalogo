@@ -147,6 +147,7 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   </div>
   <div class="button-group">
     <button class="btn-export" id="shareDatabase">📤 Condividi Database</button>
+    <button class="btn-ghost" id="debugDatabase">🔍 Verifica Database</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
@@ -200,55 +201,31 @@ function nextCode(){
   return max+1;
 }
 
-// SALVATAGGIO/CARICAMENTO (usa variabili in memoria)
-const data = {
-  sections: [],
-  logo: null,
-  email: ''
-};
-
-function save(){
-  data.sections = sections;
-  data.logo = logoData;
-  data.email = document.getElementById('emailDest').value;
-}
-
-function load(){
-  if(data.sections.length > 0){
-    sections = data.sections;
-    logoData = data.logo;
-    if(logoData){
-      document.getElementById('logoImg').src = logoData;
-      document.getElementById('logoImg').style.display = 'block';
-      document.querySelector('#logoBox span').style.display = 'none';
-    }
-    if(data.email){
-      document.getElementById('emailDest').value = data.email;
-    }
-  } else {
-    sections = [{id:uid('sec'),name:'Natale',items:[]}];
-  }
-}
-
 // AGGIUNGI FOTO
 function addPhoto(sec){
   const inp=document.createElement('input');
   inp.type='file';inp.multiple=true;inp.accept='image/*';
   inp.onchange=e=>{
     const files=Array.from(e.target.files);
+    let loaded = 0;
+    
     files.forEach(file=>{
       const r=new FileReader();
       r.onload=ev=>{
         const img=new Image();
         img.onload=()=>{
-          const max=800;let w=img.width,h=img.height;
+          // Compressione immagini
+          const max=600;
+          let w=img.width,h=img.height;
           if(w>h&&w>max){h=h*max/w;w=max;}
           else if(h>max){w=w*max/h;h=max;}
           const c=document.createElement('canvas');
           c.width=w;c.height=h;
           const ctx=c.getContext('2d');
           ctx.drawImage(img,0,0,w,h);
-          const data=c.toDataURL('image/jpeg',0.8);
+          const data=c.toDataURL('image/jpeg',0.6);
+          
+          // AGGIUNGI alla sezione corretta
           sec.items.push({
             id:uid('it'),
             img:data,
@@ -257,7 +234,12 @@ function addPhoto(sec){
             qty:0,
             fav:false
           });
-          save();render();
+          
+          loaded++;
+          if(loaded === files.length){
+            console.log('✅ Caricate', loaded, 'foto. Totale nella sezione:', sec.items.length);
+            render();
+          }
         };
         img.src=ev.target.result;
       };
@@ -276,7 +258,7 @@ function render(){
     s.draggable=true;
     s.innerHTML=`
       <div class="head">
-        <h3>${sec.name} <button class="del" title="Elimina sezione">🗑️</button></h3>
+        <h3>${sec.name} (${sec.items.length}) <button class="del" title="Elimina sezione">🗑️</button></h3>
         <span>▼</span>
         <button class="btn-ghost" data-id="${sec.id}">Aggiungi foto</button>
       </div>
@@ -298,14 +280,14 @@ function render(){
       `;
       grid.appendChild(c);
 
-      c.querySelector('.note').oninput=e=>{it.note=e.target.textContent;save();};
-      c.querySelector('input[type=checkbox]').onchange=e=>{it.fav=e.target.checked;save();};
-      c.querySelector('.qty').onchange=e=>{it.qty=parseInt(e.target.value)||0;save();};
+      c.querySelector('.note').oninput=e=>{it.note=e.target.textContent;};
+      c.querySelector('input[type=checkbox]').onchange=e=>{it.fav=e.target.checked;};
+      c.querySelector('.qty').onchange=e=>{it.qty=parseInt(e.target.value)||0;};
 
       c.querySelector('.del-photo').onclick=()=>{
         if(confirm('Vuoi eliminare questa foto?')){
           sec.items = sec.items.filter(x=>x.id!==it.id);
-          save();render();
+          render();
         }
       };
     });
@@ -320,17 +302,16 @@ function render(){
     s.querySelector('.del').onclick=()=>{
       if(confirm('Vuoi eliminare la sezione "'+sec.name+'"?')){
         sections=sections.filter(x=>x.id!==sec.id);
-        save();render();
+        render();
       }
     };
 
     s.addEventListener('dragstart',()=>s.classList.add('dragging'));
-    s.addEventListener('dragend',()=>{s.classList.remove('dragging');save();});
+    s.addEventListener('dragend',()=>{s.classList.remove('dragging');});
     main.appendChild(s);
   });
 
   updateTotal();
-  save();
   enableDrag();
 }
 
@@ -346,7 +327,6 @@ function enableDrag(){
       const id=s.querySelector('.btn-ghost').dataset.id;
       return sections.find(x=>x.id===id);
     });
-    save();
   });
 }
 
@@ -361,7 +341,41 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// CONDIVIDI DATABASE (SEMPLICE!)
+// DEBUG DATABASE
+document.getElementById('debugDatabase').onclick=()=>{
+  const totalSections = sections.length;
+  const totalPhotos = sections.reduce((tot,s)=>tot+s.items.length,0);
+  
+  let report = `📊 STATO DATABASE:\n\n`;
+  report += `📦 Sezioni: ${totalSections}\n`;
+  report += `📸 Foto totali: ${totalPhotos}\n\n`;
+  
+  sections.forEach((sec, idx) => {
+    report += `${idx+1}. ${sec.name}: ${sec.items.length} foto\n`;
+    sec.items.forEach((item, i) => {
+      const hasImg = item.img && item.img.length > 0;
+      const imgSize = hasImg ? (item.img.length / 1024).toFixed(1) + ' KB' : 'MANCANTE';
+      report += `   - ${item.code}: ${hasImg ? '✅' : '❌'} (${imgSize})\n`;
+    });
+  });
+  
+  const database = {
+    version: '1.0',
+    exportDate: new Date().toISOString(),
+    logo: logoData,
+    email: document.getElementById('emailDest').value,
+    sections: sections
+  };
+  
+  const dataStr = JSON.stringify(database);
+  const sizeInMB = (dataStr.length / 1024 / 1024).toFixed(2);
+  report += `\n💾 Dimensione export: ${sizeInMB} MB`;
+  
+  alert(report);
+  console.log('DATABASE COMPLETO:', database);
+};
+
+// CONDIVIDI DATABASE
 document.getElementById('shareDatabase').onclick=async ()=>{
   try {
     const database = {
@@ -374,31 +388,46 @@ document.getElementById('shareDatabase').onclick=async ()=>{
     
     const totalPhotos = sections.reduce((tot,s)=>tot+s.items.length,0);
     const dataStr = JSON.stringify(database);
+    const sizeInMB = (dataStr.length / 1024 / 1024).toFixed(2);
+    
+    console.log('📤 Esportazione database:', {
+      sezioni: sections.length,
+      foto: totalPhotos,
+      dimensione: sizeInMB + ' MB'
+    });
+    
+    if(totalPhotos === 0){
+      alert('⚠️ Non ci sono foto da esportare!\n\nAggiungi almeno una foto prima di esportare.');
+      return;
+    }
+    
+    if(dataStr.length > 50000000) {
+      alert(`⚠️ Database troppo grande (${sizeInMB} MB)!\n\n📸 Hai ${totalPhotos} foto.\n\nRiduci il numero di foto.`);
+      return;
+    }
+    
     const blob = new Blob([dataStr], {type: 'application/json'});
     const fileName = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
     const file = new File([blob], fileName, {type: 'application/json'});
     
-    // Prova Web Share API (funziona su tutti i telefoni moderni!)
+    // Prova Web Share API
     if (navigator.share) {
       try {
         await navigator.share({
           title: 'Database Catalogo Eleonora',
-          text: `📸 ${totalPhotos} foto - ${new Date().toLocaleDateString('it-IT')}`,
+          text: `📸 ${totalPhotos} foto - ${sizeInMB} MB`,
           files: [file]
         });
         
-        alert('✅ Perfetto!\n\nOra sul PC/altro telefono:\n1️⃣ Scarica il file che ti sei inviato\n2️⃣ Apri il generatore\n3️⃣ Clicca "📥 Importa Database"\n4️⃣ Seleziona il file');
+        alert('✅ Perfetto!\n\nOra:\n1️⃣ Scarica il file che ti sei inviato\n2️⃣ Apri il generatore sull\'altro dispositivo\n3️⃣ Clicca "📥 Importa Database"\n4️⃣ Seleziona il file');
         return;
       } catch(err) {
-        if(err.name === 'AbortError') {
-          // Utente ha annullato, non mostrare errore
-          return;
-        }
+        if(err.name === 'AbortError') return;
         console.log('Share fallito, uso download:', err);
       }
     }
     
-    // Fallback: download normale (per PC o telefoni vecchi)
+    // Fallback: download
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -408,7 +437,7 @@ document.getElementById('shareDatabase').onclick=async ()=>{
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
     
-    alert('✅ File scaricato!\n\n📱 Dal telefono: trova il file in Download e invialo a te stesso via Telegram/WhatsApp\n\n💻 Dal PC: il file è in Download, invialo via email a te stesso');
+    alert(`✅ File scaricato (${sizeInMB} MB - ${totalPhotos} foto)!\n\nTrova il file in Download e invialo a te stesso via Telegram/WhatsApp/Email`);
     
   } catch(err) {
     alert('❌ Errore: ' + err.message);
@@ -431,8 +460,10 @@ document.getElementById('importDatabase').onchange=e=>{
     try {
       const database = JSON.parse(ev.target.result);
       
+      console.log('📥 Database importato:', database);
+      
       if(!database.sections || !Array.isArray(database.sections)) {
-        throw new Error('File non valido');
+        throw new Error('File non valido: manca sections');
       }
       
       sections = database.sections;
@@ -451,16 +482,17 @@ document.getElementById('importDatabase').onchange=e=>{
         document.getElementById('emailDest').value = database.email;
       }
       
-      save();
       render();
       
-      alert('✅ Database importato!\n\n' + 
+      const totalPhotos = sections.reduce((tot,s)=>tot+s.items.length,0);
+      
+      alert('✅ Database importato con successo!\n\n' + 
             `📦 Sezioni: ${sections.length}\n` +
-            `📸 Foto: ${sections.reduce((tot,s)=>tot+s.items.length,0)}\n` +
+            `📸 Foto: ${totalPhotos}\n` +
             `📅 ${new Date(database.exportDate).toLocaleDateString('it-IT')}`);
       
     } catch(err) {
-      alert('❌ Errore: ' + err.message);
+      alert('❌ Errore importazione:\n' + err.message);
       console.error(err);
     }
     
@@ -476,7 +508,7 @@ document.getElementById('addSectionBtn').onclick=()=>{
   if(!n)return alert('Scrivi un nome sezione!');
   sections.push({id:uid('sec'),name:n,items:[]});
   document.getElementById('newSectionName').value='';
-  save();render();
+  render();
 };
 
 document.getElementById('newSectionName').addEventListener('keypress', e => {
@@ -496,18 +528,14 @@ document.getElementById('logoInput').onchange=e=>{
     img.src=logoData;
     img.style.display='block';
     document.querySelector('#logoBox span').style.display='none';
-    save();
   };
   r.readAsDataURL(f);
 };
 
 document.getElementById('resetStorage').onclick=()=>{
-  if(confirm('Eliminare tutto?')){
+  if(confirm('Eliminare tutto e ricominciare da zero?')){
     sections = [];
     logoData = null;
-    data.sections = [];
-    data.logo = null;
-    data.email = '';
     location.reload();
   }
 };
@@ -574,24 +602,4 @@ document.getElementById('exportHtml').onclick=()=>{
   };
   document.getElementById('sendEmail').onclick=()=>{
     const m=genMsg();
-    window.location.href='mailto:${email}?subject=Ordine Creazioni D\\'Arte Eleonora&body='+m.replace(/%0A/g,'%0D%0A');
-  };
-  <\/script></body></html>`;
-
-  const blob=new Blob([clienteHtml],{type:'text/html'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='catalogo_cliente.html';
-  a.click();
-};
-
-// INIT
-window.addEventListener("DOMContentLoaded",()=>{
-  const logoBox=document.getElementById("logoBox");
-  requestAnimationFrame(()=>logoBox.classList.add("show"));
-  load();
-  render();
-});
-</script>
-</body>
-</html>
+    window.location.href='mailto:${email}?subject=Ordine Creazioni D\\'Arte Eleonora&body='+
