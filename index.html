@@ -94,7 +94,7 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
   gap:12px;background:#fff;
 }
 .section.open .cards{display:grid;animation:fadecards .3s ease;}
-@keyframes fadecards{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}
+@keyframes fadecards{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}
 .card{
   background:#fff;border-radius:12px;padding:10px;
   box-shadow:0 3px 10px rgba(0,0,0,0.05);
@@ -364,19 +364,13 @@ document.getElementById('exportDatabase').onclick=()=>{
   const dataStr = JSON.stringify(database, null, 2);
   const filename = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
   
-  // 🟢 MODIFICA: Utilizzo della tecnica data-uri, più affidabile per i download su mobile.
+  // 🟢 STRATEGIA PER SAFARI (iOS): Aprire i dati in una nuova scheda.
   const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
   
-  const a = document.createElement('a');
-  a.href = dataUri;
-  a.download = filename;
+  // Apri in una nuova scheda. L'utente deve salvare manualmente.
+  window.open(dataUri, '_blank');
   
-  // Inserisce, clicca e rimuove l'elemento per forzare il download.
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  
-  alert('✅ Database esportato e scaricato! Cercalo nella cartella "Download" e condividilo da lì per il trasferimento.');
+  alert('✅ Database esportato con successo!\n\n⚠️ ISTRUZIONI PER SAFARI (iOS):\n1. È stata aperta una nuova scheda con il testo del database.\n2. In alto, tocca l\'**icona di Condivisione** (un quadrato con una freccia che esce).\n3. Seleziona l\'opzione **"Salva su File"** per salvare il database con nome ' + filename);
 };
 
 // 🆕 IMPORTA DATABASE
