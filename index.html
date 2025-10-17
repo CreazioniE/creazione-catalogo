@@ -141,20 +141,19 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
 
 <!-- SEZIONE IMPORT/EXPORT -->
 <div class="import-export-section">
-  <h4>💾 Import/Export Database via Telegram</h4>
+  <h4>💾 Trasferisci Database</h4>
   <div style="font-size:13px;color:#856404;margin-bottom:10px;">
-    Usa Telegram per trasferire il database tra telefono e PC (nessun limite di dimensione!)
+    Salva e condividi il database per usarlo su altri dispositivi
   </div>
   <div class="button-group">
-    <button class="btn-export" id="exportDatabase">📦 Scarica Database</button>
-    <button class="btn-export" id="sendTelegram">📱 Apri Telegram</button>
+    <button class="btn-export" id="shareDatabase">📤 Condividi Database</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
     </label>
   </div>
   <div style="font-size:12px;color:#856404;margin-top:8px;">
-    💡 <strong>Come funziona:</strong> Scarica → Apri Telegram → Invia a "Messaggi Salvati" → Sul PC scaricalo e importa
+    💡 Clicca "Condividi" → scegli Telegram/WhatsApp/Email → invialo a te stesso → importa sull'altro dispositivo
   </div>
 </div>
 
@@ -362,8 +361,8 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// ESPORTA DATABASE
-document.getElementById('exportDatabase').onclick=()=>{
+// CONDIVIDI DATABASE (SEMPLICE!)
+document.getElementById('shareDatabase').onclick=async ()=>{
   try {
     const database = {
       version: '1.0',
@@ -373,38 +372,47 @@ document.getElementById('exportDatabase').onclick=()=>{
       sections: sections
     };
     
+    const totalPhotos = sections.reduce((tot,s)=>tot+s.items.length,0);
     const dataStr = JSON.stringify(database);
     const blob = new Blob([dataStr], {type: 'application/json'});
+    const fileName = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+    const file = new File([blob], fileName, {type: 'application/json'});
+    
+    // Prova Web Share API (funziona su tutti i telefoni moderni!)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Database Catalogo Eleonora',
+          text: `📸 ${totalPhotos} foto - ${new Date().toLocaleDateString('it-IT')}`,
+          files: [file]
+        });
+        
+        alert('✅ Perfetto!\n\nOra sul PC/altro telefono:\n1️⃣ Scarica il file che ti sei inviato\n2️⃣ Apri il generatore\n3️⃣ Clicca "📥 Importa Database"\n4️⃣ Seleziona il file');
+        return;
+      } catch(err) {
+        if(err.name === 'AbortError') {
+          // Utente ha annullato, non mostrare errore
+          return;
+        }
+        console.log('Share fallito, uso download:', err);
+      }
+    }
+    
+    // Fallback: download normale (per PC o telefoni vecchi)
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
     
-    alert('✅ Database scaricato!\n\nOra:\n1️⃣ Apri Telegram\n2️⃣ Vai in "Messaggi Salvati"\n3️⃣ Carica il file dalla cartella Download\n4️⃣ Sul PC scaricalo e importa');
+    alert('✅ File scaricato!\n\n📱 Dal telefono: trova il file in Download e invialo a te stesso via Telegram/WhatsApp\n\n💻 Dal PC: il file è in Download, invialo via email a te stesso');
+    
   } catch(err) {
     alert('❌ Errore: ' + err.message);
     console.error(err);
-  }
-};
-
-// APRI TELEGRAM
-document.getElementById('sendTelegram').onclick=()=>{
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  
-  if(isMobile){
-    // Su mobile prova ad aprire l'app
-    window.location.href = 'tg://resolve?domain=';
-    setTimeout(() => {
-      alert('📱 Telegram aperto!\n\n1️⃣ Vai in "Messaggi Salvati"\n2️⃣ Clicca sulla graffetta 📎\n3️⃣ Seleziona "File"\n4️⃣ Carica il file JSON dalla cartella Download');
-    }, 500);
-  } else {
-    // Su desktop apri Telegram Web
-    window.open('https://web.telegram.org', '_blank');
-    alert('💻 Telegram Web aperto!\n\n1️⃣ Accedi a Telegram\n2️⃣ Cerca "Messaggi Salvati" (icona bookmark)\n3️⃣ Clicca sulla graffetta 📎\n4️⃣ Carica il file JSON');
   }
 };
 
