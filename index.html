@@ -153,7 +153,8 @@ window.addEventListener("DOMContentLoaded",()=>{
     Esporta tutto il database (foto incluse) per trasferirlo su altri dispositivi o come backup.
   </div>
   <div class="button-group">
-    <button class="btn-export" id="exportDatabase">📦 Esporta Database (.json)</button>
+    <button class="btn-export" id="exportDatabase">📦 Download Database</button>
+    <button class="btn-export" id="shareDatabase">📧 Invia Database via Email</button>
     <label class="btn-import">
       📥 Importa Database
       <input id="importDatabase" type="file" accept=".json,application/json" style="display:none;">
@@ -344,27 +345,126 @@ function getDragAfterElement(container,y){
   },{offset:Number.NEGATIVE_INFINITY}).element;
 }
 
-// 🆕 ESPORTA DATABASE
+// 🆕 ESPORTA DATABASE (Download)
 document.getElementById('exportDatabase').onclick=()=>{
-  const database = {
-    version: '1.0',
-    exportDate: new Date().toISOString(),
-    logo: logoData,
-    email: document.getElementById('emailDest').value,
-    sections: sections
-  };
-  
-  const dataStr = JSON.stringify(database, null, 2);
-  const blob = new Blob([dataStr], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  
-  alert('✅ Database esportato! Ora puoi inviartelo via email/WhatsApp e importarlo su un altro dispositivo.');
+  try {
+    const database = {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      logo: logoData,
+      email: document.getElementById('emailDest').value,
+      sections: sections
+    };
+    
+    const dataStr = JSON.stringify(database, null, 2);
+    const blob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    
+    alert('✅ Database esportato! Controlla la cartella Download.');
+  } catch(err) {
+    alert('❌ Errore durante l\'esportazione:\n' + err.message);
+    console.error(err);
+  }
 };
+
+// 🆕 INVIA DATABASE VIA EMAIL (Funziona su tutti i dispositivi!)
+document.getElementById('shareDatabase').onclick=()=>{
+  try {
+    const database = {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      logo: logoData,
+      email: document.getElementById('emailDest').value,
+      sections: sections
+    };
+    
+    const dataStr = JSON.stringify(database);
+    
+    // Crea un file temporaneo come data URL
+    const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    
+    // Prova a usare Web Share API se disponibile (mobile)
+    if (navigator.share) {
+      // Converti in Blob per lo share
+      const blob = new Blob([dataStr], {type: 'application/json'});
+      const file = new File([blob], `catalogo_eleonora_${new Date().toISOString().split('T')[0]}.json`, {type: 'application/json'});
+      
+      navigator.share({
+        title: 'Database Catalogo Eleonora',
+        text: 'Database completo del catalogo con tutte le foto',
+        files: [file]
+      }).then(() => {
+        alert('✅ Database condiviso! Ora puoi inviarlo via email/WhatsApp a te stesso.');
+      }).catch(err => {
+        // Fallback: usa mailto
+        useFallbackEmail(dataStr);
+      });
+    } else {
+      // Desktop: usa mailto
+      useFallbackEmail(dataStr);
+    }
+  } catch(err) {
+    alert('❌ Errore durante l\'esportazione:\n' + err.message);
+    console.error(err);
+  }
+};
+
+function useFallbackEmail(dataStr) {
+  // Su alcuni dispositivi il database potrebbe essere troppo grande per mailto
+  // Quindi offriamo di copiarlo negli appunti
+  if(dataStr.length > 50000) {
+    if(confirm('⚠️ Il database è molto grande!\n\nVuoi copiarlo negli appunti? Poi potrai incollarlo in un file di testo e salvarlo.')) {
+      copyToClipboard(dataStr);
+    }
+  } else {
+    // Crea email con il database nel body
+    const subject = encodeURIComponent('Database Catalogo Eleonora');
+    const body = encodeURIComponent('Database esportato il ' + new Date().toLocaleString('it-IT') + '\n\nCopia il testo qui sotto e salvalo come file .json:\n\n' + dataStr);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    
+    setTimeout(() => {
+      alert('✅ Email aperta! Se non funziona, usa il pulsante "Download Database" oppure contattami per alternative.');
+    }, 500);
+  }
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('✅ Database copiato negli appunti!\n\n1. Apri Note/Memo\n2. Incolla il testo\n3. Salvalo come "database.json"\n4. Invialo via email a te stesso');
+    }).catch(err => {
+      showTextArea(text);
+    });
+  } else {
+    showTextArea(text);
+  }
+}
+
+function showTextArea(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;height:80%;z-index:10000;padding:10px;';
+  document.body.appendChild(ta);
+  ta.select();
+  
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;';
+  document.body.appendChild(overlay);
+  
+  alert('📋 Seleziona tutto il testo (tieni premuto e scegli "Seleziona tutto"), poi copialo e chiudi questa finestra.\n\nPoi incollalo in Note/Memo e salvalo come "database.json"');
+  
+  overlay.onclick = () => {
+    document.body.removeChild(ta);
+    document.body.removeChild(overlay);
+  };
+}
 
 // 🆕 IMPORTA DATABASE
 document.getElementById('importDatabase').onchange=e=>{
