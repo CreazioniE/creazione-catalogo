@@ -602,4 +602,29 @@ document.getElementById('exportHtml').onclick=()=>{
   };
   document.getElementById('sendEmail').onclick=()=>{
     const m=genMsg();
-    window.location.href='mailto:${email}?subject=Ordine Creazioni D\\'Arte Eleonora&body='+
+    window.location.href='mailto:${email}?subject=Ordine Creazioni D\\'Arte Eleonora&body='+m.replace(/%0A/g,'%0D%0A');
+  };
+  <\/script></body></html>`;
+
+  const blob=new Blob([clienteHtml],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='catalogo_cliente.html';
+  a.click();
+};
+
+// INIT
+window.addEventListener("DOMContentLoaded",()=>{
+  const logoBox=document.getElementById("logoBox");
+  requestAnimationFrame(()=>logoBox.classList.add("show"));
+  
+  // Inizializza con una sezione vuota se non ci sono sezioni
+  if(sections.length === 0){
+    sections = [{id:uid('sec'),name:'Natale',items:[]}];
+  }
+  
+  render();
+});
+</script>
+</body>
+</html>
