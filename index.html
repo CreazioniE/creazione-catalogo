@@ -49,6 +49,15 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
 @keyframes fadecards{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}
 .card{background:#fff;border-radius:12px;padding:10px;box-shadow:0 3px 10px rgba(0,0,0,0.05);display:flex;flex-direction:column;gap:8px;}
 .card:hover{box-shadow:0 0 8px rgba(255,175,200,0.5);}
+.card.dragging-card{opacity:0.4;transform:scale(0.98);}
+.move-buttons{display:flex;gap:4px;justify-content:center;margin-top:4px;}
+.move-btn{padding:4px 12px;border-radius:6px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-size:16px;transition:all .2s;}
+.move-btn:active{transform:scale(0.95);background:#f0f0f0;}
+.move-btn:disabled{opacity:0.3;cursor:not-allowed;}
+@media (min-width: 768px) {
+  .card{cursor:grab;}
+  .card:active{cursor:grabbing;}
+}
 .thumb{width:100%;height:200px;border-radius:10px;overflow:hidden;background:#fafafa;display:flex;align-items:center;justify-content:center;}
 .thumb img{width:100%;height:100%;object-fit:cover;}
 .code{font-weight:700;color:#c64d6f;font-size:14px;}
@@ -125,6 +134,7 @@ const PASSWORD_GENERATORE = "cleopatra";
 
 let sections=[];
 let logoData=null;
+let openSections=new Set(); // 🆕 Memorizza quali sezioni sono aperte
 const main=document.getElementById('mainContent');
 
 document.getElementById('loginBtn').onclick=checkPassword;
@@ -184,21 +194,113 @@ function render(){
   main.innerHTML='';
   sections.forEach(sec=>{
     const s=document.createElement('div');s.className='section';s.draggable=true;
+    
+    // 🆕 Ripristina lo stato aperto/chiuso
+    if(openSections.has(sec.id)){
+      s.classList.add('open');
+    }
+    
     s.innerHTML=`<div class="head"><h3>${sec.name} (${sec.items.length}) <button class="del" title="Elimina sezione">🗑️</button></h3><span>▼</span><button class="btn-ghost" data-id="${sec.id}">Aggiungi foto</button></div><div class="cards"></div>`;
     const grid=s.querySelector('.cards');
-    sec.items.forEach(it=>{
+    
+    sec.items.forEach((it, index)=>{
       const c=document.createElement('div');
       c.className='card';
-      c.innerHTML=`<div class="thumb"><img src="${it.img}"></div><div class="code">${it.code}</div><div class="note" contenteditable="true">${it.note||'Nota...'}</div><div class="controls"><label class="fav"><input type="checkbox" ${it.fav?'checked':''}> 💕</label><input type="number" value="${it.qty}" min="0" class="qty"></div><button class="btn-ghost del-photo">🗑️ Elimina foto</button>`;
+      c.dataset.itemId=it.id;
+      c.draggable=true; // 🆕 Abilita drag per PC
+      c.innerHTML=`
+        <div class="thumb"><img src="${it.img}"></div>
+        <div class="code">${it.code}</div>
+        <div class="note" contenteditable="true">${it.note||'Nota...'}</div>
+        <div class="controls">
+          <label class="fav"><input type="checkbox" ${it.fav?'checked':''}> 💕</label>
+          <input type="number" value="${it.qty}" min="0" class="qty">
+        </div>
+        <div class="move-buttons">
+          <button class="move-btn move-up" ${index===0?'disabled':''}>⬆️</button>
+          <button class="move-btn move-down" ${index===sec.items.length-1?'disabled':''}>⬇️</button>
+        </div>
+        <button class="btn-ghost del-photo">🗑️ Elimina foto</button>
+      `;
       grid.appendChild(c);
+      
       c.querySelector('.note').oninput=e=>{it.note=e.target.textContent;};
       c.querySelector('input[type=checkbox]').onchange=e=>{it.fav=e.target.checked;};
       c.querySelector('.qty').onchange=e=>{it.qty=parseInt(e.target.value)||0;};
-      c.querySelector('.del-photo').onclick=()=>{if(confirm('Vuoi eliminare questa foto?')){sec.items=sec.items.filter(x=>x.id!==it.id);render();}};
+      c.querySelector('.del-photo').onclick=()=>{
+        if(confirm('Vuoi eliminare questa foto?')){
+          sec.items=sec.items.filter(x=>x.id!==it.id);
+          render();
+        }
+      };
+      
+      // 🆕 DRAG AND DROP per PC
+      c.addEventListener('dragstart', (e) => {
+        // Solo se non stai trascinando da input/button/note
+        if(e.target.tagName==='INPUT' || e.target.tagName==='BUTTON' || e.target.closest('.note')){
+          e.preventDefault();
+          return;
+        }
+        c.classList.add('dragging-card');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      
+      c.addEventListener('dragend', () => {
+        c.classList.remove('dragging-card');
+        // Salva il nuovo ordine
+        const cards = [...grid.querySelectorAll('.card')];
+        sec.items = cards.map(card => {
+          const itemId = card.dataset.itemId;
+          return sec.items.find(item => item.id === itemId);
+        });
+      });
+      
+      c.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const draggingCard = grid.querySelector('.dragging-card');
+        if (!draggingCard || draggingCard === c) return;
+        
+        const rect = c.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        
+        if (e.clientY < midY) {
+          grid.insertBefore(draggingCard, c);
+        } else {
+          grid.insertBefore(draggingCard, c.nextSibling);
+        }
+      });
+      
+      // 🆕 SPOSTA SU
+      c.querySelector('.move-up').onclick=()=>{
+        if(index > 0){
+          [sec.items[index], sec.items[index-1]] = [sec.items[index-1], sec.items[index]];
+          render();
+        }
+      };
+      
+      // 🆕 SPOSTA GIÙ
+      c.querySelector('.move-down').onclick=()=>{
+        if(index < sec.items.length - 1){
+          [sec.items[index], sec.items[index+1]] = [sec.items[index+1], sec.items[index]];
+          render();
+        }
+      };
     });
-    s.querySelector('.head').addEventListener('click',e=>{if(e.target.tagName==='BUTTON'&&!e.target.classList.contains('del'))return;s.classList.toggle('open');});
+    
+    s.querySelector('.head').addEventListener('click',e=>{
+      if(e.target.tagName==='BUTTON'&&!e.target.classList.contains('del'))return;
+      s.classList.toggle('open');
+      
+      // 🆕 Memorizza lo stato
+      if(s.classList.contains('open')){
+        openSections.add(sec.id);
+      } else {
+        openSections.delete(sec.id);
+      }
+    });
+    
     s.querySelector('.btn-ghost').onclick=()=>addPhoto(sec);
-    s.querySelector('.del').onclick=()=>{if(confirm('Vuoi eliminare la sezione "'+sec.name+'"?')){sections=sections.filter(x=>x.id!==sec.id);render();}};
+    s.querySelector('.del').onclick=()=>{if(confirm('Vuoi eliminare la sezione "'+sec.name+'"?')){sections=sections.filter(x=>x.id!==sec.id);openSections.delete(sec.id);render();}};
     s.addEventListener('dragstart',()=>s.classList.add('dragging'));
     s.addEventListener('dragend',()=>{s.classList.remove('dragging');});
     main.appendChild(s);
