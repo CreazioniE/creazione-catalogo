@@ -49,15 +49,14 @@ header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
 @keyframes fadecards{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}
 .card{background:#fff;border-radius:12px;padding:10px;box-shadow:0 3px 10px rgba(0,0,0,0.05);display:flex;flex-direction:column;gap:8px;}
 .card:hover{box-shadow:0 0 8px rgba(255,175,200,0.5);}
-.card.dragging-card{opacity:0.4;transform:scale(0.98);}
 .move-buttons{display:flex;gap:4px;justify-content:center;margin-top:4px;}
 .move-btn{padding:4px 12px;border-radius:6px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-size:16px;transition:all .2s;}
 .move-btn:active{transform:scale(0.95);background:#f0f0f0;}
 .move-btn:disabled{opacity:0.3;cursor:not-allowed;}
-@media (min-width: 768px) {
-  .card{cursor:grab;}
-  .card:active{cursor:grabbing;}
-}
+.move-buttons{display:flex;gap:4px;justify-content:center;margin-top:4px;}
+.move-btn{padding:4px 12px;border-radius:6px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-size:16px;transition:all .2s;}
+.move-btn:active{transform:scale(0.95);background:#f0f0f0;}
+.move-btn:disabled{opacity:0.3;cursor:not-allowed;}
 .thumb{width:100%;height:200px;border-radius:10px;overflow:hidden;background:#fafafa;display:flex;align-items:center;justify-content:center;}
 .thumb img{width:100%;height:100%;object-fit:cover;}
 .code{font-weight:700;color:#c64d6f;font-size:14px;}
@@ -207,7 +206,6 @@ function render(){
       const c=document.createElement('div');
       c.className='card';
       c.dataset.itemId=it.id;
-      c.draggable=true; // 🆕 Abilita drag per PC
       c.innerHTML=`
         <div class="thumb"><img src="${it.img}"></div>
         <div class="code">${it.code}</div>
@@ -234,43 +232,7 @@ function render(){
         }
       };
       
-      // 🆕 DRAG AND DROP per PC
-      c.addEventListener('dragstart', (e) => {
-        // Solo se non stai trascinando da input/button/note
-        if(e.target.tagName==='INPUT' || e.target.tagName==='BUTTON' || e.target.closest('.note')){
-          e.preventDefault();
-          return;
-        }
-        c.classList.add('dragging-card');
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      
-      c.addEventListener('dragend', () => {
-        c.classList.remove('dragging-card');
-        // Salva il nuovo ordine
-        const cards = [...grid.querySelectorAll('.card')];
-        sec.items = cards.map(card => {
-          const itemId = card.dataset.itemId;
-          return sec.items.find(item => item.id === itemId);
-        });
-      });
-      
-      c.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        const draggingCard = grid.querySelector('.dragging-card');
-        if (!draggingCard || draggingCard === c) return;
-        
-        const rect = c.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        
-        if (e.clientY < midY) {
-          grid.insertBefore(draggingCard, c);
-        } else {
-          grid.insertBefore(draggingCard, c.nextSibling);
-        }
-      });
-      
-      // 🆕 SPOSTA SU
+      // ⬆️⬇️ SPOSTA SU/GIÙ
       c.querySelector('.move-up').onclick=()=>{
         if(index > 0){
           [sec.items[index], sec.items[index-1]] = [sec.items[index-1], sec.items[index]];
@@ -278,7 +240,6 @@ function render(){
         }
       };
       
-      // 🆕 SPOSTA GIÙ
       c.querySelector('.move-down').onclick=()=>{
         if(index < sec.items.length - 1){
           [sec.items[index], sec.items[index+1]] = [sec.items[index+1], sec.items[index]];
@@ -436,6 +397,10 @@ document.getElementById('exportHtml').onclick=()=>{
     @keyframes fadeOut{to{opacity:0;visibility:hidden;}}
     #content{opacity:0;animation:showContent 1s ease 2.5s forwards;}
     @keyframes showContent{to{opacity:1;}}
+    #preferiti{background:linear-gradient(135deg,#ffe0f0,#fff5e6);border:2px solid #ffb6d9;}
+    #preferiti .head{background:linear-gradient(135deg,#ffc0cb,#ffd700);}
+    #preferiti h3{color:#d63384 !important;}
+    .empty-fav{text-align:center;padding:20px;color:#999;font-style:italic;}
   </style></head><body>
   <div id="intro">
     ${logoData?`<img src="${logoData}">`:`<div style="font-family:'Dancing Script',cursive;font-size:28px;color:#7a3b6f;">Creazioni D'Arte Eleonora</div>`}
@@ -444,16 +409,70 @@ document.getElementById('exportHtml').onclick=()=>{
   ${logoData?`<div class="logoBox"><img src="${logoData}"></div>`:`<div class="logoBox">Logo</div>`}
   <h1 style="font-family:'Dancing Script',cursive;color:#7a3b6f;text-align:center">Creazioni D'Arte Eleonora</h1>
   <input id="clienteNome" placeholder="Nome cliente" style="width:60%;padding:8px;border:1px solid #ccc;border-radius:8px;display:block;margin:10px auto;text-align:center;font-weight:600;color:#7a3b6f;">
+  
+  <section id="preferiti">
+    <div class="head">
+      <h3 style="margin:0;font-family:'Dancing Script',cursive;color:#d63384">💕 I Miei Preferiti (<span id="favCount">0</span>)</h3>
+      <span>▼</span>
+    </div>
+    <div class="cards" id="favCards">
+      <div class="empty-fav">Seleziona i cuoricini 💕 per aggiungere foto ai preferiti!</div>
+    </div>
+  </section>
+
   ${sections.map(sec=>`<section><div class="head"><h3 style="margin:0;font-family:'Dancing Script',cursive;color:#7a3b6f">${sec.name}</h3><span>▼</span></div><div class="cards">
-  ${sec.items.map(it=>`<div style="background:#fff;padding:6px;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,0.05)">
+  ${sec.items.map(it=>`<div style="background:#fff;padding:6px;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,0.05)" data-code="${it.code}">
   <img src="${it.img}"><div style="font-weight:700;color:#c64d6f">${it.code}</div><div>${it.note||''}</div>
-  <div><label><input type="checkbox"> 💕</label> <input type="number" min="0" value="${it.qty}" class="qty-input" style="width:60px"></div></div>`).join('')}
+  <div><label><input type="checkbox" class="fav-check"> 💕</label> <input type="number" min="0" value="${it.qty}" class="qty-input" style="width:60px"></div></div>`).join('')}
   </div></section>`).join('')}
   <button class="btn" id="sendWhats">📩 Invia selezione su WhatsApp</button>
   <button class="btn" id="sendEmail">📧 Invia via Email</button>
   </div>
   <script>
   document.querySelectorAll('.head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+  
+  // 💕 AGGIORNA PREFERITI
+  function updateFavorites(){
+    const favCards = document.getElementById('favCards');
+    const favCount = document.getElementById('favCount');
+    const allCards = document.querySelectorAll('section:not(#preferiti) .cards > div');
+    
+    const favorites = [];
+    allCards.forEach(card => {
+      const checkbox = card.querySelector('.fav-check');
+      if(checkbox && checkbox.checked){
+        favorites.push(card.cloneNode(true));
+      }
+    });
+    
+    favCount.textContent = favorites.length;
+    
+    if(favorites.length === 0){
+      favCards.innerHTML = '<div class="empty-fav">Seleziona i cuoricini 💕 per aggiungere foto ai preferiti!</div>';
+    } else {
+      favCards.innerHTML = '';
+      favorites.forEach(fav => {
+        // Sincronizza le checkbox dei preferiti con le originali
+        const code = fav.dataset.code;
+        const originalCard = document.querySelector(\`section:not(#preferiti) [data-code="\${code}"]\`);
+        const favCheckbox = fav.querySelector('.fav-check');
+        
+        favCheckbox.addEventListener('change', () => {
+          const origCheck = originalCard.querySelector('.fav-check');
+          origCheck.checked = favCheckbox.checked;
+          updateFavorites();
+        });
+        
+        favCards.appendChild(fav);
+      });
+    }
+  }
+  
+  // Listener su tutte le checkbox
+  document.querySelectorAll('.fav-check').forEach(chk => {
+    chk.addEventListener('change', updateFavorites);
+  });
+  
   document.addEventListener('DOMContentLoaded',function(){
     document.querySelectorAll('.qty-input').forEach(input=>{
       input.addEventListener('focus',function(e){setTimeout(()=>{this.select();this.setSelectionRange(0,9999);},10);});
@@ -462,10 +481,11 @@ document.getElementById('exportHtml').onclick=()=>{
       input.addEventListener('mousedown',function(e){if(this.value!==''){setTimeout(()=>{this.select();this.setSelectionRange(0,9999);},10);}});
     });
   });
+  
   function genMsg(){
     const nome=document.getElementById('clienteNome').value.trim();
     let msg='Ordine'+(nome?' di '+nome:'')+'%0A%0A';
-    document.querySelectorAll('section').forEach(sec=>{
+    document.querySelectorAll('section:not(#preferiti)').forEach(sec=>{
       sec.querySelectorAll('.cards > div').forEach(card=>{
         const chk=card.querySelector('input[type=checkbox]');
         if(chk.checked){
